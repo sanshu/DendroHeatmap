@@ -1,0 +1,350 @@
+<!doctype html>
+<html class="no-js" lang="">
+<!-- @author Mayya Sedova <msedova.dev@gmail.com> -->
+<!-- @repo https://github.com/sanshu/DendroHeatmap> -->
+
+<head>
+    <meta charset="utf-8">
+    <meta name="description" content="">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>DendroHeatmap</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha384-9ndCyUaIbzAi2FUVXJi0CjmCapSmO7SnpJef0486qhLnuZ2cdeRhO02iuK6FUUVM" crossorigin="anonymous">
+
+
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <style>
+        /* disable text selection */
+        svg *::selection {
+            background: transparent;
+        }
+
+        svg *::-moz-selection {
+            background: transparent;
+        }
+
+        svg *::-webkit-selection {
+            background: transparent;
+        }
+
+        svg {
+            border: 1px solid #EEE;
+        }
+
+        rect.selection {
+            stroke: #333;
+            stroke-dasharray: 4px;
+            stroke-opacity: 0.5;
+            fill: transparent;
+        }
+
+        rect.cell-border {
+            stroke: #eee;
+            stroke-width: 0.3px;
+        }
+
+        rect.cell-selected {
+            stroke: rgb(51, 102, 153);
+            stroke-width: 0.5px;
+        }
+
+        rect.cell-hover {
+            stroke: #F00;
+            stroke-width: 0.3px;
+        }
+
+        text.mono {
+            font-size: 9pt;
+            font-family: Consolas, courier;
+            fill: #aaa;
+        }
+
+        text.text-selected {
+            fill: #000;
+        }
+
+        text.text-highlight {
+            fill: #c00;
+        }
+
+        text.text-hover {
+            fill: #00C;
+        }
+
+        #tooltip {
+            position: absolute;
+            width: 200px;
+            height: auto;
+            padding: 10px;
+            background-color: white;
+            -webkit-border-radius: 10px;
+            -moz-border-radius: 10px;
+            border-radius: 10px;
+            -webkit-box-shadow: 4px 4px 10px rgba(0, 0, 0, 0.4);
+            -moz-box-shadow: 4px 4px 10px rgba(0, 0, 0, 0.4);
+            box-shadow: 4px 4px 10px rgba(0, 0, 0, 0.4);
+            pointer-events: none;
+        }
+
+        #tooltip.hidden {
+            display: none;
+        }
+
+        #tooltip p {
+            margin: 0;
+            font-family: sans-serif;
+            font-size: 12px;
+            line-height: 20px;
+        }
+
+        .axis path {
+            display: none;
+        }
+
+        .axis line {
+            stroke-opacity: 0.3;
+            shape-rendering: crispEdges;
+        }
+
+        #cmContainer {
+            padding: 15px;
+        }
+    </style>
+    <style>
+        .background {
+            fill: #eee;
+        }
+
+        .label {
+            font: 300 12px "Helvetica Neue", Helvetica, Arial, sans-serif;
+            fill: #2f2f2f;
+        }
+
+
+        text.active {
+            fill: red;
+            font-weight: bold;
+        }
+
+        line {
+            stroke: #fff;
+        }
+
+        .container {
+            display: grid;
+            width: 1000px;
+            grid-template-areas: "head head"
+                "intro intro"
+                "graph aside";
+            grid-template-columns: auto auto;
+            justify-items: center;
+            margin: auto;
+        }
+
+        graph {
+            grid-area: graph;
+        }
+
+        aside {
+            grid-area: aside;
+            margin: 5px;
+            margin-top: 280px;
+        }
+
+        body {
+            text-align: center;
+        }
+
+        #title {
+            font-family: 'Sintony', sans-serif;
+            font-weight: 200;
+            font-size: 38px;
+            margin-top: 45px;
+            margin-bottom: 0px;
+        }
+
+        #subtitle {
+            font-family: 'Sintony', sans-serif;
+            font-weight: 300;
+            font-size: 13px;
+            margin-top: 5px;
+            margin-bottom: 55px;
+            color: #e04556;
+        }
+
+        h1 {
+            font-family: 'Sintony', sans-serif;
+            font-weight: 700;
+            line-height: 51px;
+            font-size: 46px;
+            text-transform: uppercase;
+            margin: 0 0 23px 0;
+        }
+    </style>
+    <style>
+        #d3tooltip {
+            position: absolute;
+            width: 200px;
+            height: auto;
+            padding: 10px;
+            background-color: #fafafa;
+            -webkit-border-radius: 10px;
+            -moz-border-radius: 10px;
+            border-radius: 10px;
+            -webkit-box-shadow: 4px 4px 10px rgba(0, 0, 0, 0.4);
+            -moz-box-shadow: 4px 4px 10px rgba(0, 0, 0, 0.4);
+            box-shadow: 4px 4px 10px rgba(0, 0, 0, 0.4);
+            pointer-events: none;
+            opacity: 0;
+        }
+
+        #d3tooltip.hidden {
+            display: none;
+        }
+
+        #d3tooltip p {
+            margin: 0;
+            font-family: sans-serif;
+            font-size: 12px;
+            line-height: 20px;
+        }
+
+        rect.selection {
+            stroke: #333;
+            stroke-dasharray: 4px;
+            stroke-opacity: 0.5;
+            fill: transparent;
+        }
+
+        rect.cell-border {
+            stroke: #eee;
+            stroke-width: 0.3px;
+        }
+
+        rect.cell-selected {
+            stroke: rgb(51, 102, 153);
+            stroke-width: 0.5px;
+        }
+
+        rect.cell-hover {
+            stroke: #F00;
+            stroke-width: 0.3px;
+        }
+
+        text.mono {
+            font-size: 8pt;
+            font-family: Consolas, courier;
+            fill: #aaa;
+        }
+
+        .rlink,
+        .clink {
+            fill: none;
+            stroke: #ccc;
+            stroke-width: 1.5px;
+        }
+
+
+        .grid-container {
+            display: grid;
+            grid-template-columns: auto auto auto auto;
+            gap: 10px;
+
+            padding: 10px;
+        }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3-legend/2.25.6/d3-legend.min.js"></script>
+
+    <script src="./scripts/clusterfck/clusterfck-0.1.js"></script>
+    <script src="./scripts/d3-kmeans/d3.kmeans.js"></script>
+    <script src="index.js"></script>
+</head>
+
+<body>
+    <!--[if IE]>
+          <p class="browserupgrade">You are using an <strong>outdated</strong> browser. Please <a href="http://browsehappy.com/">upgrade your browser</a> to improve your experience.</p>
+        <![endif]-->
+
+    <div class="container-fluid">
+        <div class="header">
+            <h3 class="text-muted">DendroHeatmap</h3>
+        </div>
+
+        <div class="row">
+            <div class="col-sm-12">
+                <label for="data">Matrix data (rowid colid value1 {value2..})</label>
+                <textarea class="form-control" id="data" rows="5"></textarea>
+                <br>
+                <input type="file" id="fileinput" name="fileinput" accept=".tsv, .txt" />
+
+            </div>
+            <!-- <div class="col-sm-4">
+                <div class="form-group">
+                    <label for="numClusters">Number of clusters</label>
+                    <select class="form-control" id="numClusters">
+                        <option>3</option>
+                        <option>4</option>
+                        <option>5</option>
+                        <option>6</option>
+                        <option>7</option>
+                    </select>
+                </div>
+                <br>
+                <button type="button" class="btn btn-secondary btn-sm mx-1" onclick="drawData()">Display</button>
+                <br>
+
+                <button type="button" class="btn btn-secondary btn-sm mx-1" onclick="clearData();">Clear</button>
+            </div> -->
+
+        </div>
+    </div>
+
+    </div>
+
+
+    <div class="row" id='matrixContainer'>
+    </div>
+
+
+    <script>
+        const fileInput = document.querySelector("#fileinput");
+        const dataTextArea = document.getElementById("data");
+
+        function drawData() {
+            console.log('drawing');
+            const matrix = dataTextArea.value.trim();
+            DendroHeatmap(matrix, "#matrixContainer");
+        }
+
+        function clearData() {
+            console.log("clearing...");
+            dataTextArea.value = ""
+            d3.select("#matrixContainer").selectAll("*").remove();
+        }
+
+        const loadFile = async function () {
+            const file = fileInput.files[0];
+            const reader = new FileReader();
+            reader.onload = (res) => {
+                dataTextArea.value = res.target.result
+
+                // const data = JSON.parse();
+                // d3.heatmapDendro(data, "#heatmap", 5000);
+
+                drawData();
+            };
+            reader.onerror = (err) => console.log(err);
+            reader.readAsText(file);
+        }
+
+        fileInput.addEventListener("change", loadFile);
+
+    </script>
+
+</body>
+
+</html>
