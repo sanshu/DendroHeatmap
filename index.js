@@ -350,7 +350,7 @@
                     d3.select("#d3tooltip")
                         .style("left", (event.pageX + 10) + "px")
                         .style("top", (event.pageY - 10) + "px")
-                        .select("#value")
+                        .select("#tooltipvalue")
                         .html(
                             "Column: " + colsLabels[d.col - 1] + "<br>Row: " + rowsLabels[d.row - 1]
                             + "<br>Value: " + d.value
@@ -410,14 +410,15 @@
             }
         }
 
-        const clusterByAndDisplay = function (data, rowname, colname, propname) {
+        const clusterByAndDisplay = function (data, rowname, colname, propname, colorschema) {
 
             // get data using accessor
             let valueMatrix = getValueMatrix(data, rowname, colname, propname)
             // let matrix = valueMatrix.matrix;
 
             // TODO: add UI to change this
-            let colorScale = d3.scaleSequential(valueMatrix.extent, d3.interpolateRdYlGn);
+            let cs = colorschema ? colorschema : d3.interpolateRdYlGn;
+            let colorScale = d3.scaleSequential(valueMatrix.extent, cs);
 
             // const numClusters = 3;
             // let links = this.clusterKmeans(links, numClusters);
@@ -438,6 +439,14 @@
         }
 
         const initControls = function (headers) {
+            if (d3.selectAll("#d3tooltip").empty()) {
+                d3.select("body")
+                .append("div")
+                .attr("id", "d3tooltip")
+                .append("p")
+                .attr("id", "tooltipvalue")
+            }
+
             // prompt for row and col labels:
             let controls = d3.select(parent).append('div').attr("class", "dendrocontrols grid-container");
 
@@ -492,6 +501,82 @@
                     return d;
                 });
 
+            // coloring // cluster controls
+            let colorCtl = controls.append("div");
+            colorCtl.append("div").html("Coloring")
+            let colorLabelInput = colorCtl
+                .append("select").attr("id", "clusterLabelSelect");
+
+            const colorSchemas = [
+
+                { label: "Red -> Yellow -> Green", value: d3.interpolateRdYlGn },
+                { label: "Brown -> BlueGreen", value: d3.interpolateBrBG },
+                { label: "Purple -> Green", value: d3.interpolatePRGn },
+                { label: "Pinkk -> YellowGreen", value: d3.interpolatePiYG },
+                { label: "Purple -> Orange", value: d3.interpolatePuOr },
+
+                { label: "Red -> Blue", value: d3.interpolateRdBu },
+                { label: "Red -> Yellow -> Blue", value: d3.interpolateRdYlBu },
+                { label: "Spectral", value: d3.interpolateSpectral },
+
+                //single color
+                { label: "Blue", value: d3.interpolateBlues },
+                { label: "Green", value: d3.interpolateGreens },
+                { label: "Gray", value: d3.interpolateGreys },
+                { label: "Orange", value: d3.interpolateOranges },
+                { label: "Purple", value: d3.interpolatePurples },
+                { label: "Red", value: d3.interpolateReds },
+
+                // Multi-Hue    
+                { label: "Turbo", value: d3.interpolateTurbo },
+                { label: "Viridis", value: d3.interpolateViridis },
+                { label: "Inferno", value: d3.interpolateInferno },
+                { label: "Magma", value: d3.interpolateMagma },
+                { label: "Plasma", value: d3.interpolatePlasma },
+                { label: "Cividis", value: d3.interpolateCividis },
+
+
+                { label: "Warm", value: d3.interpolateWarm },
+                { label: "Cool", value: d3.interpolateCool },
+                { label: "Cubehelix", value: d3.interpolateCubehelixDefault },
+
+
+                { label: "BlueGreen", value: d3.interpolateBuGn },
+                { label: "BluePurple", value: d3.interpolateBuPu },
+                { label: "GreenBlue", value: d3.interpolateGnBu },
+
+
+                { label: "OrangeRed", value: d3.interpolateOrRd },
+                { label: "PurpleBlueGreen", value: d3.interpolatePuBuGn },
+                { label: "PurpleBlue", value: d3.interpolatePuBu },
+
+
+                { label: "PurpleRed", value: d3.interpolatePuRd },
+                { label: "RedPurple", value: d3.interpolateRdPu },
+
+                { label: "YellowGreen", value: d3.interpolateYlGn },
+
+
+                { label: "YellowGreenBlue", value: d3.interpolateYlGnBu },
+                { label: "YellowOrangeBrown", value: d3.interpolateYlOrBr },
+
+                { label: "YellowOrangeRed", value: d3.interpolateYlOrRd },
+
+            ]
+
+
+
+            colorLabelInput.selectAll("option")
+                .data(colorSchemas)
+                .enter()
+                .append("option")
+                .attr("value", function (d, i) {
+                    return i;
+                })
+                .text(function (d) {
+                    return d.label;
+                });
+
             let errorrDiv = controls.append("div").attr("style", "color:red");
 
             controls.append("button")
@@ -507,13 +592,13 @@
                         errorrDiv.html("Selected values should be different")
                     }
                     else {
-
+                        let colr = colorSchemas[colorLabelInput.node().value].value;
                         let data = parseData(textdata, headers, rowLb, colLb, clsLb);
                         console.log(data)
                         console.log(`Parsed [${data.rowLabels.length} x ${data.colLabels.length}] matrix
                         with ${data.headers.length - 2} value sets`);
 
-                        clusterByAndDisplay(data, rowLb, colLb, clsLb)
+                        clusterByAndDisplay(data, rowLb, colLb, clsLb, colr)
                     }
 
                 })
