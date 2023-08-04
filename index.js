@@ -441,11 +441,30 @@
         const initControls = function (headers) {
             if (d3.selectAll("#d3tooltip").empty()) {
                 d3.select("body")
-                .append("div")
-                .attr("id", "d3tooltip")
-                .append("p")
-                .attr("id", "tooltipvalue")
+                    .append("div")
+                    .attr("id", "d3tooltip")
+                    .append("p")
+                    .attr("id", "tooltipvalue")
             }
+
+            /*
+<svg id="legendFor3d" width="100%" height="40px">
+                <defs>
+                  <linearGradient id="legendGradient">
+                    <stop offset="0%" :stop-color="activeColors[0]"></stop>
+                    <stop offset="25%" :stop-color="activeColors[1]"></stop>
+                    <stop offset="50%" :stop-color="activeColors[2]"></stop>
+                    <stop offset="75%" :stop-color="activeColors[3]"></stop>
+                    <stop offset="100%" :stop-color="activeColors[4]"></stop>
+                  </linearGradient>
+                </defs>
+               
+                <rect transform="translate(0, 20)" width="200" height="20" style="fill: url('#legendGradient')"></rect>
+              </svg>
+
+
+
+            */
 
             // prompt for row and col labels:
             let controls = d3.select(parent).append('div').attr("class", "dendrocontrols grid-container");
@@ -505,7 +524,7 @@
             let colorCtl = controls.append("div");
             colorCtl.append("div").html("Coloring")
             let colorLabelInput = colorCtl
-                .append("select").attr("id", "clusterLabelSelect");
+                .append("select").attr("id", "colorSelect");
 
             const colorSchemas = [
 
@@ -564,7 +583,16 @@
 
             ]
 
-
+            let legend;
+            let colorSvg;
+            let defs;
+            let stops = [0, 25, 50, 75, 100];
+            if (colorCtl.select("svg").empty()) {
+                colorSvg = colorCtl.append("svg")
+                    .attr("width", 150)
+                    .attr("height", 20)
+                defs = colorSvg.append("defs");
+            }
 
             colorLabelInput.selectAll("option")
                 .data(colorSchemas)
@@ -576,6 +604,34 @@
                 .text(function (d) {
                     return d.label;
                 });
+            colorLabelInput.on("change", function () {
+                colorSvg.selectAll("linearGradient").remove();
+
+                //Append a linearGradient element to the defs and give it a unique id
+              let  linearGradient = defs.append("linearGradient")
+                    .attr("id", "linear-gradient");
+                //Horizontal gradient
+                linearGradient
+                    .attr("x1", "0%")
+                    .attr("y1", "0%")
+                    .attr("x2", "100%")
+                    .attr("y2", "0%");
+
+                legend = colorSvg.append("rect")
+                    .attr("width", 150)
+                    .attr("height", 20)
+                let colorScale = d3.scaleSequential([0, 100], colorSchemas[this.value].value)
+
+                //Append multiple color stops by using D3's data/enter step
+                linearGradient.selectAll("stop")
+                    .data(stops)
+                    .enter().append("stop")
+                    .attr("offset", function (d) { return `${d}%` })
+                    .attr("stop-color", function (d) { return colorScale(d); });
+
+
+                legend.style("fill", "url(#linear-gradient)");
+            })
 
             let errorrDiv = controls.append("div").attr("style", "color:red");
 
