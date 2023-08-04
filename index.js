@@ -41,12 +41,23 @@
         const parseHeaders = function (tsv) {
             const lines = tsv.split("\n");
             let headers = [];
+            let sample = lines[1] ? lines[1].split(splitre) : [];
+
             if (lines[0].startsWith("#")) {
-                headers = lines[0].substring(1).split(splitre)
+                let parts = lines[0].substring(1).split(splitre);
+                parts.forEach((p, j) => {
+                    headers.push({
+                        label: p.trim(),
+                        isNumeric: ! isNaN(sample[j])
+                    })
+                })
             } else {
                 const N = lines[0].split(splitre).length;
                 for (let i = 1; i <= N; i++) {
-                    headers.push(`Column ${i}`)
+                    headers.push({
+                        label: `Column ${i}`,
+                        isNumeric: !isNaN(sample[i])
+                    })
                 }
             }
             return headers;
@@ -54,10 +65,12 @@
 
         const parseData = function (tsv, headers, rowLb, colLb) {
             // non-distinct labels
-            let rowIdx = headers.indexOf(rowLb);
+
+            let rowIdx = headers.map(h => h.label).indexOf(rowLb);
+            //headers.indexOf(rowLb);
             rowIdx = rowIdx >= 0 ? rowIdx : 0;
             let rowLbs = [];
-            let colIdx = headers.indexOf(colLb);
+            let colIdx = headers.map(h => h.label).indexOf(colLb);//headers.indexOf(colLb);
             colIdx = colIdx >= 0 ? colIdx : 1;
             let colLbs = [];
 
@@ -73,7 +86,7 @@
                 const p = l.split(splitre)
 
                 let row = {};
-                headers.forEach((h, j) => row[h] = p[j].trim())
+                headers.forEach((h, j) => row[h.label] = p[j].trim())
                 m.push(row)
 
                 rowLbs.push(p[rowIdx].trim())
@@ -447,25 +460,6 @@
                     .attr("id", "tooltipvalue")
             }
 
-            /*
-<svg id="legendFor3d" width="100%" height="40px">
-                <defs>
-                  <linearGradient id="legendGradient">
-                    <stop offset="0%" :stop-color="activeColors[0]"></stop>
-                    <stop offset="25%" :stop-color="activeColors[1]"></stop>
-                    <stop offset="50%" :stop-color="activeColors[2]"></stop>
-                    <stop offset="75%" :stop-color="activeColors[3]"></stop>
-                    <stop offset="100%" :stop-color="activeColors[4]"></stop>
-                  </linearGradient>
-                </defs>
-               
-                <rect transform="translate(0, 20)" width="200" height="20" style="fill: url('#legendGradient')"></rect>
-              </svg>
-
-
-
-            */
-
             // prompt for row and col labels:
             let controls = d3.select(parent).append('div').attr("class", "dendrocontrols grid-container");
 
@@ -480,15 +474,15 @@
                 .enter()
                 .append("option")
                 .attr("value", function (d) {
-                    return d;
+                    return d.label;
                 })
                 .text(function (d) {
-                    return d;
+                    return d.label;
                 });
 
             // cols controls
             let colsCtl = controls.append("div");
-            colsCtl.append("div").html("Matrix column labels")
+            colsCtl.append("div").html("Matrix column labels (numeric only)")
             let colLabelInput = colsCtl
                 .append("select").attr("id", "colLabelSelect");
 
@@ -497,10 +491,10 @@
                 .enter()
                 .append("option")
                 .attr("value", function (d) {
-                    return d;
+                    return d.label;
                 })
                 .text(function (d) {
-                    return d;
+                    return d.label;
                 });
 
             // cluster controls
@@ -510,14 +504,14 @@
                 .append("select").attr("id", "clusterLabelSelect");
 
             clusterLabelInput.selectAll("option")
-                .data(headers)
+                .data(headers.filter(h => h.isNumeric))
                 .enter()
                 .append("option")
                 .attr("value", function (d) {
-                    return d;
+                    return d.label;
                 })
                 .text(function (d) {
-                    return d;
+                    return d.label;
                 });
 
             // coloring // cluster controls
@@ -604,11 +598,12 @@
                 .text(function (d) {
                     return d.label;
                 });
+
             colorLabelInput.on("change", function () {
                 colorSvg.selectAll("linearGradient").remove();
 
                 //Append a linearGradient element to the defs and give it a unique id
-              let  linearGradient = defs.append("linearGradient")
+                let linearGradient = defs.append("linearGradient")
                     .attr("id", "linear-gradient");
                 //Horizontal gradient
                 linearGradient
@@ -628,7 +623,6 @@
                     .enter().append("stop")
                     .attr("offset", function (d) { return `${d}%` })
                     .attr("stop-color", function (d) { return colorScale(d); });
-
 
                 legend.style("fill", "url(#linear-gradient)");
             })
