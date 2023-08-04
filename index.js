@@ -489,11 +489,12 @@
                 })
                 .text(function (d) {
                     return d.label;
-                });
+                })
+                .property("selected", function (d) { return d.label === "qacc" });
 
             // cols controls
             let colsCtl = controls.append("div");
-            colsCtl.append("div").html("Matrix column labels (numeric only)")
+            colsCtl.append("div").html("Matrix column labels")
             let colLabelInput = colsCtl
                 .append("select").attr("id", "colLabelSelect");
 
@@ -506,11 +507,12 @@
                 })
                 .text(function (d) {
                     return d.label;
-                });
+                })
+                .property("selected", function (d) { return d.label === "species" });
 
             // cluster controls
             let clusterCtl = controls.append("div");
-            clusterCtl.append("div").html("Matrix data")
+            clusterCtl.append("div").html("Matrix data (numeric only)")
             let clusterLabelInput = clusterCtl
                 .append("select").attr("id", "clusterLabelSelect");
 
@@ -523,7 +525,8 @@
                 })
                 .text(function (d) {
                     return d.label;
-                });
+                })
+                .property("selected", function (d) { return d.label === "pident" });;
 
             // duplicate mode
             const dupModes = [
