@@ -48,7 +48,7 @@
                 parts.forEach((p, j) => {
                     headers.push({
                         label: p.trim(),
-                        isNumeric: ! isNaN(sample[j])
+                        isNumeric: !isNaN(sample[j])
                     })
                 })
             } else {
@@ -115,11 +115,12 @@
          * convert pairwise to rect matrix using propname
          * Input is an array of objects {}
          * @param {*} rawdata 
-         * @param {*} rowname - name of the column to use as row label
-         * @para
-         * @param {*} propname - name of the column to use as data value
+         * @param {String} rowname - name of the column to use as matrix row label
+         * @param {String} colname - name of the column to use as matrix column label
+         * @param {String} propname - name of the column to use as data value
+         * @param {String} duplicatesMode - one of []first, last, min, max
          */
-        const getValueMatrix = function (rawdata, rowname, colname, propname) {
+        const getValueMatrix = function (rawdata, rowname, colname, propname, duplicatesMode = "first") {
             // matrix dimensions
             const nrows = rawdata.rowLabels.length;
             const ncols = rawdata.colLabels.length;
@@ -143,6 +144,16 @@
                 let r = rawdata.rowLabels.indexOf(pair[rowname])
                 let c = rawdata.colLabels.indexOf(pair[colname])
                 let v = +pair[propname];
+                // check if pair was seen before
+                if (mxrows[r][c] != null && mxrows[r][c] != 0) {
+                    switch (duplicatesMode) {
+                        case "first": v = mxrows[r][c]; break;
+                        case "last": v = v; break;
+                        case "min": v = Math.min(v, mxrows[r][c]); break;
+                        case "max": v = Math.max(v, mxrows[r][c]); break;
+                        default: v = mxrows[r][c]; break;
+                    }
+                }
                 mxrows[r][c] = v;
                 mxcols[c][r] = v;
                 min = Math.min(min, v);
@@ -423,10 +434,10 @@
             }
         }
 
-        const clusterByAndDisplay = function (data, rowname, colname, propname, colorschema) {
+        const clusterByAndDisplay = function (data, rowname, colname, propname, colorschema, duplicatesMode) {
 
             // get data using accessor
-            let valueMatrix = getValueMatrix(data, rowname, colname, propname)
+            let valueMatrix = getValueMatrix(data, rowname, colname, propname, duplicatesMode)
             // let matrix = valueMatrix.matrix;
 
             // TODO: add UI to change this
@@ -513,6 +524,31 @@
                 .text(function (d) {
                     return d.label;
                 });
+
+            // duplicate mode
+            const dupModes = [
+                { label: "Keep first", value: "first" },
+                { label: "Keep last", value: "last" },
+                { label: "Keep min", value: "min" },
+                { label: "Keep max", value: "max" }
+            ];
+
+            let duplCtl = controls.append("div");
+            duplCtl.append("div").html("Duplicates mode")
+            let duplicatesModeInput = duplCtl
+                .append("select").attr("id", "duplSelect");
+            duplicatesModeInput.selectAll("option")
+                .data(dupModes)
+                .enter()
+                .append("option")
+                .attr("value", function (d) {
+                    return d.value;
+                })
+                .text(function (d) {
+                    return d.label;
+                });
+
+
 
             // coloring // cluster controls
             let colorCtl = controls.append("div");
@@ -637,6 +673,7 @@
                     let rowLb = rowLabelInput.node().value;
                     let colLb = colLabelInput.node().value;
                     let clsLb = clusterLabelInput.node().value;
+                    let duplLb = duplicatesModeInput.node().value;
 
                     if (rowLb === colLb || colLb === clsLb || rowLb === clsLb) {
                         errorrDiv.html("Selected values should be different")
@@ -648,7 +685,7 @@
                         console.log(`Parsed [${data.rowLabels.length} x ${data.colLabels.length}] matrix
                         with ${data.headers.length - 2} value sets`);
 
-                        clusterByAndDisplay(data, rowLb, colLb, clsLb, colr)
+                        clusterByAndDisplay(data, rowLb, colLb, clsLb, colr, duplLb)
                     }
 
                 })
