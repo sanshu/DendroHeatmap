@@ -238,6 +238,12 @@
             fill: #aaa;
         }
 
+        text.text-highlight{
+            font-size:12pt;
+            font-weight: 300;
+            fill: #000;
+        }
+
         .rlink,
         .clink {
             fill: none;
@@ -286,34 +292,12 @@
                 <input type="file" id="fileinput" name="fileinput" accept=".tsv, .txt" />
 
             </div>
-            <!-- <div class="col-sm-4">
-                <div class="form-group">
-                    <label for="numClusters">Number of clusters</label>
-                    <select class="form-control" id="numClusters">
-                        <option>3</option>
-                        <option>4</option>
-                        <option>5</option>
-                        <option>6</option>
-                        <option>7</option>
-                    </select>
-                </div>
-                <br>
-                <button type="button" class="btn btn-secondary btn-sm mx-1" onclick="drawData()">Display</button>
-                <br>
-
-                <button type="button" class="btn btn-secondary btn-sm mx-1" onclick="clearData();">Clear</button>
-            </div> -->
-
         </div>
-    </div>
+
+        <div class="row" id='matrixContainer'>
+        </div>
 
     </div>
-
-
-    <div class="row" id='matrixContainer'>
-    </div>
-
-
     <script>
         const fileInput = document.querySelector("#fileinput");
         const dataTextArea = document.getElementById("data");
@@ -334,11 +318,7 @@
             const file = fileInput.files[0];
             const reader = new FileReader();
             reader.onload = (res) => {
-                dataTextArea.value = res.target.result
-
-                // const data = JSON.parse();
-                // d3.heatmapDendro(data, "#heatmap", 5000);
-
+                dataTextArea.value = res.target.result;
                 drawData();
             };
             reader.onerror = (err) => console.log(err);
@@ -352,12 +332,9 @@
             .then((text) => {
                 dataTextArea.value = text;
                 drawData();
-            }
-            );
-
+            });
 
     </script>
-
 </body>
 
 </html>
