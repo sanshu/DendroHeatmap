@@ -6,7 +6,6 @@
 
 (function () {
 
-
     DendroHeatmap = function (textdata, parent) {
 
         // console.log(data)
@@ -311,7 +310,7 @@
             svg.attr("width", width + margin.left + margin.right + clusterSpace)
                 .attr("height", height + margin.top + margin.bottom + clusterSpace);
 
-            let rowLabels = svg.append("g")
+            let rowLabels = svg.append("g").attr("id", "rowlabels")
                 .selectAll(".rowLabelg")
                 .data(rowsLabels)
                 .enter()
@@ -329,7 +328,7 @@
                     return "rowLabel mono r" + i;
                 });
 
-            let colLabels = svg.append("g")
+            let colLabels = svg.append("g").attr("id", "columnlabels")
                 .selectAll(".colLabelg")
                 .data(colsLabels)
                 .enter()
@@ -347,7 +346,7 @@
                     return "colLabel mono c" + i;
                 });
 
-            let heatMap = svg.append("g").attr("class", "g3")
+            let heatMap = svg.append("g").attr("class", "g3").attr("id", "heatmap")
                 .selectAll(".cellg")
                 .data(matrix, function (d) {
                     return d.row + ":" + d.col;
@@ -372,8 +371,8 @@
                     d3.select(this).classed("cell-hover", true);
                     //Update the tooltip position and value
                     d3.select("#d3tooltip")
-                        .style("left", (event.pageX + 10) + "px")
-                        .style("top", (event.pageY - 10) + "px")
+                        .style("left", (event.pageX - 210) + "px")
+                        .style("top", (event.pageY - 80) + "px")
                         .select("#tooltipvalue")
                         .html(
                             "Column: " + colsLabels[d.col - 1] + "<br>Row: " + rowsLabels[d.row - 1]
@@ -383,6 +382,9 @@
                     d3.select("#d3tooltip").transition()
                         .duration(200)
                         .style("opacity", .9);
+
+                    d3.selectAll(`.r${d.row-1}`).classed("text-highlight", true); 
+                    d3.selectAll(`.c${d.col-1}`).classed("text-highlight", true);    
                 })
                 .on("mouseout", function () {
                     d3.select(this).classed("cell-hover", false);
@@ -550,8 +552,6 @@
                 .text(function (d) {
                     return d.label;
                 });
-
-
 
             // coloring // cluster controls
             let colorCtl = controls.append("div");
