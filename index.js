@@ -15,7 +15,22 @@
         if (!textdata)
             return;
 
+        // parent area is a 2-column grid
 
+
+        // prompt for row and col labels:
+        const topControls = d3.select(parent).append('div')
+            .attr("class", "grid-container");
+
+        const wrapper = d3.select(parent).append("div")
+            .attr("class", "dendro-wrapper");
+
+        const dendroControls = wrapper.append('div')
+            .attr("class", "dendro-controls").property("hidden", true);
+
+        const dendroCanvas = wrapper.append("div")
+            .style("overflow", "scroll")
+            .attr("class", "dendro-canvas").html("Nothing to display yet.");
         let margin = {
             top: 150,
             right: 50,
@@ -233,7 +248,7 @@
 
 
         /**
-         * Reorderx matrix according to clustering order
+         * Reorder matrix according to clustering order
          * For 1d array use reorderMatrix(array, [0], colOrder)
          * @param {*} matrix - original matrix
          * @param {*} rowOrder - order of rows in the new matrix
@@ -272,14 +287,10 @@
          */
         const heatmapDendro = function (orderedMatrix, rowsTree, colsTree, rowsLabels, colsLabels, colorScale) {
 
-            d3.select(parent)//.attr("style", "overflow: scroll;");
-            d3.select(parent).selectAll(".dendrocanvas").remove();
+            // clear canvas
+            dendroCanvas.selectAll("*").remove();
 
-            let canvas = d3.select(parent).append("div")
-                .style("overflow", "scroll")
-                .attr("class", "dendrocanvas")
-            let svg = canvas
-                .append("svg")
+            let svg = dendroCanvas.append("svg")
                 .attr("width", "100%")
                 .attr("height", "150px");
 
@@ -290,8 +301,6 @@
 
             let clusterSpace = treeViewSize, // size of the cluster tree
                 width = cellSize * colNumber + clusterSpace, // - margin.left - margin.right,
-                // rowCluster = d3.cluster().size([height - clusterSpace, clusterSpace]),
-                // colCluster = d3.cluster().size([width - clusterSpace, clusterSpace]),
                 rowNodes = rowsTree.descendants(),
                 colNodes = colsTree.descendants();
             height = cellSize * rowNumber + clusterSpace; // - margin.top - margin.bottom
@@ -303,7 +312,6 @@
                     matrix.push({ row: r + 1, col: c + 1, value: orderedMatrix[r][c] });
                 }
             }
-
 
             svg.selectAll("*").remove();
 
@@ -383,8 +391,8 @@
                         .duration(200)
                         .style("opacity", .9);
 
-                    d3.selectAll(`.r${d.row-1}`).classed("text-highlight", true); 
-                    d3.selectAll(`.c${d.col-1}`).classed("text-highlight", true);    
+                    d3.selectAll(`.r${d.row - 1}`).classed("text-highlight", true);
+                    d3.selectAll(`.c${d.col - 1}`).classed("text-highlight", true);
                 })
                 .on("mouseout", function () {
                     d3.select(this).classed("cell-hover", false);
@@ -393,24 +401,45 @@
                     d3.select("#d3tooltip").transition()
                         .duration(200)
                         .style("opacity", 0);
-                })
-                ;
+                });
+
+
+            const nodeMouseOver = function (node, event, d, isRow) {
+                node.classed("node-hover", true)
+                    .attr("r", function (d) {
+                        return d.children ? 6 : .5
+                    });
+            }
+            const nodeMouseOut = function (node, event, d, isRow) {
+                node.classed("node-hover", false)
+                    .attr("r", function (d) {
+                        return d.children ? 2 : .5
+                    });
+            }
 
             //tree for rows
-            let rTree = svg.append("g").attr("class", "rtree").attr("transform", "translate (10, " + (clusterSpace + cellSize) + ")");
+            let rTree = svg.append("g").attr("class", "rtree")
+                .attr("transform", "translate (10, " + (clusterSpace + cellSize) + ")");
+
             let rlink = rTree.selectAll(".rlink")
                 .data(rowsTree.links())
                 .enter().append("path")
                 .attr("class", "rlink")
-                // .attr("stroke", "#888")
                 .attr("d", elbow);
 
             let rnode = rTree.selectAll(".rnode")
                 .data(rowNodes)
-                .enter().append("g")
+                .enter().append("circle")
                 .attr("class", "rnode")
                 .attr("transform", function (d) {
                     return "translate(" + d.y + "," + d.x + ")";
+                })
+                .attr("r", function (d) {
+                    return d.children ? 2 : .5
+                }).on("mouseover", function (event, d) {
+                    nodeMouseOver(d3.select(this), event, d, true)
+                }).on("mouseout", function (event, d) {
+                    nodeMouseOut(d3.select(this), event, d, true)
                 });
 
             //tree for cols
@@ -419,15 +448,23 @@
                 .data(colsTree.links())
                 .enter().append("path")
                 .attr("class", "clink")
-                // .attr("stroke", "#888")
                 .attr("d", elbow);
 
             let cnode = cTree.selectAll(".cnode")
                 .data(colNodes)
-                .enter().append("g")
+                .enter().append("circle")
                 .attr("class", "cnode")
                 .attr("transform", function (d) {
                     return "translate(" + d.y + "," + d.x + ")";
+                })
+                .attr("r", function (d) {
+                    return d.children ? 2 : d.parent ? 0 : .5
+                })
+                .on("mouseover", function (event, d) {
+                    nodeMouseOver(d3.select(this), event, d, false)
+                })
+                .on("mouseout", function (event, d) {
+                    nodeMouseOut(d3.select(this), event, d, false)
                 });
 
             function elbow(d, i) {
@@ -437,10 +474,9 @@
         }
 
         const clusterByAndDisplay = function (data, rowname, colname, propname, colorschema, duplicatesMode) {
-
+            dendroCanvas.html("")
             // get data using accessor
             let valueMatrix = getValueMatrix(data, rowname, colname, propname, duplicatesMode)
-            // let matrix = valueMatrix.matrix;
 
             // TODO: add UI to change this
             let cs = colorschema ? colorschema : d3.interpolateRdYlGn;
@@ -448,7 +484,6 @@
 
             // const numClusters = 3;
             // let links = this.clusterKmeans(links, numClusters);
-
 
             // cluster rows and columns
             let rowClusters = hcluster(valueMatrix.rowMatrix);
@@ -464,6 +499,38 @@
             heatmapDendro(orderedMatrix, rowClusters.tree, colClusters.tree, rowsLabels, colsLabels, colorScale)
         }
 
+        const temsSplitre = /[\t\n\s]+/;
+        const search = function (text, rowsmode = true) {
+
+            // if (!Array.isArray(terms)) {
+            //     // check if single string
+            //     if ('string' === typeof terms) { terms = [terms]; } else {
+            //         console.error(`Search terms must be array of strings os single string`)
+            //         return;
+            //     }
+            // }
+
+            const selector = rowsmode ? ".rowLabel" : ".colLabel";
+
+            if (!text.length) {
+                d3.selectAll(selector)
+                    .classed("matched", false);
+                return;
+            }
+
+            const terms = text.split(temsSplitre);
+            console.log(terms)
+
+            d3.selectAll(selector)
+                .classed("matched", function (d, i) {
+                    // d is the text node content
+                    let found = false;
+                    terms.forEach((t) => { if (d.indexOf(t) >= 0) found = true })
+                    return found
+                });
+
+        }
+
         const initControls = function (headers) {
             if (d3.selectAll("#d3tooltip").empty()) {
                 d3.select("body")
@@ -473,15 +540,13 @@
                     .attr("id", "tooltipvalue")
             }
 
-            // prompt for row and col labels:
-            let controls = d3.select(parent).append('div').attr("class", "dendrocontrols grid-container");
 
             // rows controls
-            let rowsCtl = controls.append("div");
-            rowsCtl.append("div").html("Matrix row labels")
+            let rowsCtl = topControls.append("div").attr("class", "");
+            rowsCtl.append("label").attr("for", "rowLabelSelect").html("Matrix row labels: ")
+
             let rowLabelInput = rowsCtl
                 .append("select").attr("id", "rowLabelSelect");
-
             rowLabelInput.selectAll("option")
                 .data(headers)
                 .enter()
@@ -495,11 +560,11 @@
                 .property("selected", function (d) { return d.label === "qacc" });
 
             // cols controls
-            let colsCtl = controls.append("div");
-            colsCtl.append("div").html("Matrix column labels")
+            let colsCtl = topControls.append("div");
+            colsCtl.append("label").attr("for", "colLabelSelect").html("Matrix column labels: ")
+
             let colLabelInput = colsCtl
                 .append("select").attr("id", "colLabelSelect");
-
             colLabelInput.selectAll("option")
                 .data(headers)
                 .enter()
@@ -513,11 +578,11 @@
                 .property("selected", function (d) { return d.label === "species" });
 
             // cluster controls
-            let clusterCtl = controls.append("div");
-            clusterCtl.append("div").html("Matrix data (numeric only)")
+            let clusterCtl = topControls.append("div");
+            clusterCtl.append("label").attr("for", "closterLabelSelect").html("Matrix data (numeric only):")
+
             let clusterLabelInput = clusterCtl
                 .append("select").attr("id", "clusterLabelSelect");
-
             clusterLabelInput.selectAll("option")
                 .data(headers.filter(h => h.isNumeric))
                 .enter()
@@ -538,8 +603,9 @@
                 { label: "Keep max", value: "max" }
             ];
 
-            let duplCtl = controls.append("div");
-            duplCtl.append("div").html("Duplicates mode")
+            let duplCtl = topControls.append("div");
+            duplCtl.append("label").attr("for", "duplSelect").html("Duplicates mode:")
+
             let duplicatesModeInput = duplCtl
                 .append("select").attr("id", "duplSelect");
             duplicatesModeInput.selectAll("option")
@@ -553,13 +619,15 @@
                     return d.label;
                 });
 
-            // coloring // cluster controls
-            let colorCtl = controls.append("div");
-            colorCtl.append("div").html("Coloring")
+            // coloring  controls
+            let colorCtl = topControls.append("div");
+            colorCtl.append("label").attr("for", "colorSelect").html("Coloring:")
             let colorLabelInput = colorCtl
                 .append("select").attr("id", "colorSelect");
 
             const colorSchemas = [
+                { label: "Orange", value: d3.interpolateOranges },
+
 
                 { label: "Red -> Yellow -> Green", value: d3.interpolateRdYlGn },
                 { label: "Brown -> BlueGreen", value: d3.interpolateBrBG },
@@ -575,7 +643,6 @@
                 { label: "Blue", value: d3.interpolateBlues },
                 { label: "Green", value: d3.interpolateGreens },
                 { label: "Gray", value: d3.interpolateGreys },
-                { label: "Orange", value: d3.interpolateOranges },
                 { label: "Purple", value: d3.interpolatePurples },
                 { label: "Red", value: d3.interpolateReds },
 
@@ -666,13 +733,15 @@
                 legend.style("fill", "url(#linear-gradient)");
             })
 
-            let errorrDiv = controls.append("div").attr("style", "color:red");
+            let errorrDiv = topControls.append("div").attr("class", "errors");
 
-            controls.append("button")
+            topControls.append("button")
                 .attr("id", "displayButton")
+                .attr("class", "button")
                 .text("DISPLAY")
                 .on("click", function () {
                     errorrDiv.html("");
+                    dendroControls.property("hidden", false);
                     let rowLb = rowLabelInput.node().value;
                     let colLb = colLabelInput.node().value;
                     let clsLb = clusterLabelInput.node().value;
@@ -691,15 +760,47 @@
                         clusterByAndDisplay(data, rowLb, colLb, clsLb, colr, duplLb)
                     }
 
-                })
+                });
 
+
+            // search controls
+
+            let rowsSearch = dendroControls.append("div");
+            rowsSearch.append("label").attr("for", "rowSearchText").html("Search rows for:")
+
+            let rsText = rowsSearch.append('textarea')
+                .attr('type', 'text')
+                .attr('name', 'rowSearchText');
+
+
+            dendroControls.append("div").append("button")
+                .attr("class", "button")
+                .text("Search rows")
+                .on("click", function () {
+                    const text = rsText.node().value.trim();
+                    search(text, true);
+                });
+
+            let colsSearch = dendroControls.append("div");
+            colsSearch.append("label").attr("for", "colSearchText").html("Search columns for:")
+
+            let csText = colsSearch.append('textarea')
+                .attr('type', 'text')
+                .attr('name', 'colSearchText');
+
+            dendroControls.append("div").append("button")
+                .attr("class", "button")
+                .text("Search columns")
+                .on("click", function () {
+                    const text = csText.node().value.trim();
+                    search(text, false);
+                });
         }
+
+
 
         let headers = parseHeaders(textdata)
         initControls(headers);
-
-        // clusterByAndDisplay(data, 'pident')
-        // draw(data)
     }
 
 })();

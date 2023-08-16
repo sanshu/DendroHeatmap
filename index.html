@@ -183,6 +183,25 @@
         }
     </style>
     <style>
+        .button {
+            border: 1px;
+            min-height: 35px;
+            padding: 15px 32px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            background-color: #e7e7e7;
+            color: black;
+        }
+
+        .button:hover {
+
+            background-color: #340bea;
+            color: #FFF;
+        }
+
         #d3tooltip {
             position: absolute;
             width: 200px;
@@ -238,10 +257,16 @@
             fill: #aaa;
         }
 
-        text.text-highlight{
-            font-size:12pt;
+        text.text-highlight {
+            font-size: 12pt;
             font-weight: 300;
             fill: #000;
+        }
+
+        text.matched {
+            fill:red;
+            text-decoration-color: red;
+            text-decoration: underline;
         }
 
         .rlink,
@@ -251,12 +276,69 @@
             stroke-width: 1.5px;
         }
 
+        .cnode,
+        .rnode {
+            fill: #AAA;
+        }
 
+        .node-hover {
+            stroke: red
+        }
+
+        /* display controls */
         .grid-container {
+            border: #AAA 1px solid;
             display: grid;
-            grid-template-columns: auto auto auto auto auto;
+            grid-template-columns: repeat(5, [col] auto);
+            grid-template-rows: repeat(4, [row] auto);
             gap: 10px;
+            grid-gap: 10px;
             padding: 10px;
+        }
+
+        .errors {
+            color: red;
+            grid-row: row 2;
+            grid-column: col 2 / span 4;
+        }
+
+        .grid-container label {
+            display: block;
+        }
+
+        #displayButton {
+            grid-column: col 1 / span 1;
+            grid-row: row 2;
+        }
+
+        /* main wrapper */
+        .dendro-wrapper {
+            border: none;
+            margin: 10px;
+            display: grid;
+            grid-template-columns: 20% auto;
+            grid-gap: 1em;
+            grid-template-areas:
+                "sidebar content"
+        }
+
+        .dendro-canvas {
+            grid-area: content;
+            /* grid-column: col / span 5;
+            grid-row: row 1; */
+        }
+
+        .dendro-controls {
+            border-left: #AAA 1px dotted;
+            grid-area: sidebar;
+            /* grid-column: col / span 1;
+            grid-row: row 1; */
+            /* display: grid;
+            grid-template-columns: repeat(1, [col] auto); */
+        }
+
+        .dendro-controls label {
+            display: block;
         }
 
         textarea {
@@ -289,7 +371,7 @@
                     columnId value1 {value2..})</label>
                 <textarea class="form-control" id="data" rows="5" disabled></textarea>
                 <br>
-                <input type="file" id="fileinput" name="fileinput" accept=".tsv, .txt" />
+                <input type="file" class="button" id="fileinput" name="fileinput" accept=".tsv, .txt" />
 
             </div>
         </div>
