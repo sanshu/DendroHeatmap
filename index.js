@@ -15,9 +15,6 @@
         if (!textdata)
             return;
 
-        // parent area is a 2-column grid
-
-
         // prompt for row and col labels:
         const topControls = d3.select(parent).append('div')
             .attr("class", "grid-container");
@@ -41,13 +38,19 @@
                 left: 10,
                 width: 50,
                 height: 50
-            }
+            },
+
         };
 
         //matrix cell size
-        const cellSize = 10;
+        const cellSize = 12;
+        // space between cells in map
+        const cellGap = 2;
         // depth of the panel with the tree
-        const treeViewSize = 150;
+        const treeViewSize = 200;
+        // space between trees and map
+        const heatmapMargin = 3;
+
 
         // regex to split lines intto columns
         const splitre = /[\t;]+/
@@ -202,14 +205,18 @@
                 return null;
             }
 
-
             let clusters = clusterfck.hcluster(data);
             let tree = d3.hierarchy(clusters[0], children);
 
-
-            const h = cellSize * data.length;
+            const h = (cellSize + cellGap) * data.length + cellGap;
             const w = treeViewSize;
-            let tree1 = d3.cluster().size([h, w]);
+
+
+            function separation(a, b) {
+                return cellSize + cellGap;
+            }
+
+            let tree1 = d3.cluster().size([h, w]).separation(separation);
             tree1(tree);
 
             // now leaves are ordered by cluster id
@@ -285,26 +292,28 @@
          * @param {*} rowsLabels 
          * @param {*} colsLabels 
          */
-        const heatmapDendro = function (orderedMatrix, rowsTree, colsTree, rowsLabels, colsLabels, colorScale) {
+        const heatmapDendro = function (orderedMatrix, originalMatrix, rowClusters, colClusters, rowsLabels, colsLabels, colorScale) {
 
             // clear canvas
             dendroCanvas.selectAll("*").remove();
 
+            const rowsTree = rowClusters.tree;
+            const colsTree = colClusters.tree;
             let svg = dendroCanvas.append("svg")
                 .attr("width", "100%")
                 .attr("height", "150px");
 
-            let height = 150 - margin.top - margin.bottom;
+            // let height = treeViewSize - margin.top - margin.bottom;
 
             const colNumber = orderedMatrix[0].length;
             const rowNumber = orderedMatrix.length;
+            const cellWidth = cellSize + cellGap;
 
-            let clusterSpace = treeViewSize, // size of the cluster tree
-                width = cellSize * colNumber + clusterSpace, // - margin.left - margin.right,
+            let treeWidth = treeViewSize + heatmapMargin, // size of the cluster tree
+                width = cellWidth * colNumber + treeWidth,
                 rowNodes = rowsTree.descendants(),
-                colNodes = colsTree.descendants();
-            height = cellSize * rowNumber + clusterSpace; // - margin.top - margin.bottom
-
+                colNodes = colsTree.descendants(),
+                height = cellWidth * rowNumber + treeWidth;
 
             let matrix = [];
             for (let r = 0; r < rowNumber; r++) {
@@ -315,10 +324,11 @@
 
             svg.selectAll("*").remove();
 
-            svg.attr("width", width + margin.left + margin.right + clusterSpace)
-                .attr("height", height + margin.top + margin.bottom + clusterSpace);
+            svg.attr("width", width + margin.left + margin.right + treeWidth)
+                .attr("height", height + margin.top + margin.bottom + treeWidth);
 
             let rowLabels = svg.append("g").attr("id", "rowlabels")
+                .attr("transform", "translate(" + (width + cellSize) + "," + cellSize / 1.5 + ") ")
                 .selectAll(".rowLabelg")
                 .data(rowsLabels)
                 .enter()
@@ -328,10 +338,9 @@
                 })
                 .attr("x", 0)
                 .attr("y", function (d, i) {
-                    return (i + 1) * cellSize + clusterSpace;
+                    return (i + 1) * cellWidth + treeWidth;
                 })
                 .style("text-anchor", "start")
-                .attr("transform", "translate(" + (width + cellSize) + "," + cellSize / 1.5 + ") ")
                 .attr("class", function (d, i) {
                     return "rowLabel mono r" + i;
                 });
@@ -346,10 +355,10 @@
                 })
                 .attr("x", 0)
                 .attr("y", function (d, i) {
-                    return (i + 1) * cellSize;
+                    return (i + 1) * cellWidth;
                 })
                 .style("text-anchor", "end")
-                .attr("transform", "translate(" + cellSize / 2 + ",-6) rotate (-90)  translate( -" + (height + cellSize * 2) + "," + clusterSpace + ")")
+                .attr("transform", "translate(" + cellWidth / 2 + ",-6) rotate (-90)  translate( -" + (height + cellWidth * 2) + "," + treeWidth + ")")
                 .attr("class", function (d, i) {
                     return "colLabel mono c" + i;
                 });
@@ -362,10 +371,10 @@
                 .enter()
                 .append("rect")
                 .attr("x", function (d) {
-                    return d.col * cellSize + clusterSpace;
+                    return d.col * cellWidth - .5 * cellGap + treeWidth;
                 })
                 .attr("y", function (d) {
-                    return d.row * cellSize + clusterSpace;
+                    return d.row * cellWidth - .5 * cellGap + treeWidth;
                 })
                 .attr("class", function (d) {
                     return "cell cell-border cr" + (d.row - 1) + " cc" + (d.col - 1);
@@ -406,20 +415,42 @@
 
             const nodeMouseOver = function (node, event, d, isRow) {
                 node.classed("node-hover", true)
-                    .attr("r", function (d) {
-                        return d.children ? 6 : .5
+                    .attr("r", function (d, i) {
+                        return d.children ? 6 : 1
                     });
+                console.log(d);
+
+                const prefix = isRow ? "cr" : "cc";
+                const lblPrefix =isRow ? "r" : "c";
+                const matrix = isRow ? originalMatrix.rowMatrix : originalMatrix.colMatrix;
+                const order = isRow ? rowClusters.order : colClusters.order
+                const leaves = d.leaves();
+                leaves.forEach(l => {
+                    const idx = matrix.indexOf(l.data.canonical); // original idx row from matrix
+                    console.log(idx)
+                    const idx2 = order.indexOf(idx) - 1;
+                    if (idx2 >= -1) {
+                        d3.selectAll(`.${prefix}${idx2 + 1}`).classed("cell-hover", true);
+                        d3.selectAll(`.${lblPrefix}${idx2 + 1}`).classed("text-highlight", true)
+                    }
+                })
+
+                // console.log(node.attr("map-idx"))
             }
             const nodeMouseOut = function (node, event, d, isRow) {
                 node.classed("node-hover", false)
                     .attr("r", function (d) {
-                        return d.children ? 2 : .5
+                        return d.children ? 2 : 1
                     });
+                d3.selectAll(".cell").classed("cell-hover", false);
+                const cl = isRow ? ".rowLabel" : ".colLabel";
+
+                d3.selectAll(cl).classed("text-highlight", false)
             }
 
             //tree for rows
             let rTree = svg.append("g").attr("class", "rtree")
-                .attr("transform", "translate (10, " + (clusterSpace + cellSize) + ")");
+                .attr("transform", "translate (10, " + (treeWidth + cellSize) + ")");
 
             let rlink = rTree.selectAll(".rlink")
                 .data(rowsTree.links())
@@ -434,8 +465,9 @@
                 .attr("transform", function (d) {
                     return "translate(" + d.y + "," + d.x + ")";
                 })
+                // .attr("map-idx", function(d, i){return i})
                 .attr("r", function (d) {
-                    return d.children ? 2 : .5
+                    return d.children ? 2 : 1
                 }).on("mouseover", function (event, d) {
                     nodeMouseOver(d3.select(this), event, d, true)
                 }).on("mouseout", function (event, d) {
@@ -443,7 +475,7 @@
                 });
 
             //tree for cols
-            let cTree = svg.append("g").attr("class", "ctree").attr("transform", "rotate (90), translate (10, -" + (clusterSpace + cellSize) + ") scale(1,-1)");
+            let cTree = svg.append("g").attr("class", "ctree").attr("transform", "rotate (90), translate (10, -" + (treeWidth + cellSize) + ") scale(1,-1)");
             let clink = cTree.selectAll(".clink")
                 .data(colsTree.links())
                 .enter().append("path")
@@ -458,7 +490,7 @@
                     return "translate(" + d.y + "," + d.x + ")";
                 })
                 .attr("r", function (d) {
-                    return d.children ? 2 : d.parent ? 0 : .5
+                    return d.children ? 2 :1;
                 })
                 .on("mouseover", function (event, d) {
                     nodeMouseOver(d3.select(this), event, d, false)
@@ -496,19 +528,11 @@
             let rowsLabels = reorderArray(data.rowLabels, rowClusters.order)
             let colsLabels = reorderArray(data.colLabels, colClusters.order)
 
-            heatmapDendro(orderedMatrix, rowClusters.tree, colClusters.tree, rowsLabels, colsLabels, colorScale)
+            heatmapDendro(orderedMatrix, valueMatrix, rowClusters, colClusters, rowsLabels, colsLabels, colorScale)
         }
 
         const temsSplitre = /[\t\n\s]+/;
         const search = function (text, rowsmode = true) {
-
-            // if (!Array.isArray(terms)) {
-            //     // check if single string
-            //     if ('string' === typeof terms) { terms = [terms]; } else {
-            //         console.error(`Search terms must be array of strings os single string`)
-            //         return;
-            //     }
-            // }
 
             const selector = rowsmode ? ".rowLabel" : ".colLabel";
 
@@ -526,9 +550,8 @@
                     // d is the text node content
                     let found = false;
                     terms.forEach((t) => { if (d.indexOf(t) >= 0) found = true })
-                    return found
+                    return found;
                 });
-
         }
 
         const initControls = function (headers) {
@@ -539,7 +562,6 @@
                     .append("p")
                     .attr("id", "tooltipvalue")
             }
-
 
             // rows controls
             let rowsCtl = topControls.append("div").attr("class", "");
