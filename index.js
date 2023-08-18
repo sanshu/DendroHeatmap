@@ -27,7 +27,8 @@
 
         const dendroCanvas = wrapper.append("div")
             .style("overflow", "scroll")
-            .attr("class", "dendro-canvas").html("Nothing to display yet.");
+            .attr("class", "dendro-canvas")
+        const emptyMsgDiv = dendroCanvas.append("div").html("Nothing to display yet.");
         let margin = {
             top: 150,
             right: 50,
@@ -38,8 +39,7 @@
                 left: 10,
                 width: 50,
                 height: 50
-            },
-
+            }
         };
 
         //matrix cell size
@@ -51,10 +51,25 @@
         // space between trees and map
         const heatmapMargin = 3;
 
+        // value to indicate missing data poin
+        const noValue = -123456;
+        // color to show when data is missing
+        const noValueColor = "#BBB";
 
-        // regex to split lines intto columns
+        // init canvas
+        dendroCanvas.selectAll("*").remove();
+        let svg = dendroCanvas.append("svg")
+            .attr("width", "100%")
+            .attr("height", "150px");
+
+        // regex to split lines into columns
         const splitre = /[\t;]+/
 
+        /**
+         * Input tata should contain at least 3 columns
+         * @param {string} tsv - input data in tsv format
+         * @returns array of string to be used as data headers
+         */
         const parseHeaders = function (tsv) {
             const lines = tsv.split("\n");
             let headers = [];
@@ -80,15 +95,22 @@
             return headers;
         }
 
+
+        /**
+         * Parses input data
+         * @param {String} tsv - input data in tsv format
+         * @param {String[]} headers - list of available headers for data
+         * @param {String} rowLb - name of the column with row labels
+         * @param {String} colLb - name of the column with coklumn labels
+         * @returns parsed data
+         */
         const parseData = function (tsv, headers, rowLb, colLb) {
-            // non-distinct labels
 
             let rowIdx = headers.map(h => h.label).indexOf(rowLb);
-            //headers.indexOf(rowLb);
-            rowIdx = rowIdx >= 0 ? rowIdx : 0;
+            rowIdx = rowIdx >= 0 ? rowIdx : 0; //use first colums by default
             let rowLbs = [];
-            let colIdx = headers.map(h => h.label).indexOf(colLb);//headers.indexOf(colLb);
-            colIdx = colIdx >= 0 ? colIdx : 1;
+            let colIdx = headers.map(h => h.label).indexOf(colLb);
+            colIdx = colIdx >= 0 ? colIdx : 1;  //use second colums by default
             let colLbs = [];
 
             const lines = tsv.split("\n");
@@ -118,6 +140,13 @@
             };
         }
 
+        /**
+         * Create and fill matrix with given dimansions
+         * @param {number} r - number of rows
+         * @param {number} c - number of columns
+         * @param {*} filler - value ot fill the matrix
+         * @returns matrix 
+         */
         const create2Darray = function (r, c, filler) {
             let res = []
             for (let i = 0; i < r; i++) {
@@ -125,6 +154,35 @@
                 a.fill(filler, 0, c);
                 res.push(a);
             }
+            return res;
+        }
+
+        /**
+         * Check if data row satisfies all filters
+         * @param {} row 
+         * @param {*} filters 
+         * @returns boolean
+         */
+        const okFilter = function (row, filters) {
+            let res = true;
+
+            for (const [k, f] of Object.entries(filters)) {
+                let v = +row[k];
+
+                if (v != null && !isNaN(v)) {
+                    switch (f.mode) {
+                        case ">": res = res && (v > f.value); break;
+                        case ">=": res = res && (v >= f.value); break;
+                        case "<": res = res && (v < f.value); break;
+                        case "<=": res = res && (v <= f.value); break;
+                        case "--": res = res && true; break; // no filter
+                        default: res = res && true; // unknown filter
+                    }
+                } else {
+                    res = res && true;
+                }
+            }
+
             return res;
         }
 
@@ -137,22 +195,17 @@
          * @param {String} propname - name of the column to use as data value
          * @param {String} duplicatesMode - one of []first, last, min, max
          */
-        const getValueMatrix = function (rawdata, rowname, colname, propname, duplicatesMode = "first") {
+        const getValueMatrix = function (rawdata, rowname, colname, propname, duplicatesMode = "first", filters = {}) {
             // matrix dimensions
             const nrows = rawdata.rowLabels.length;
             const ncols = rawdata.colLabels.length;
 
-
             // init matrix for rows clustering, fill with 0s    
-            let mxrows = create2Darray(nrows, ncols, 0)
+            let mxrows = create2Darray(nrows, ncols, noValue)
 
             // init matrix for column clustering, fill with 0s    
-            let mxcols = create2Darray(ncols, nrows, 0);
-            // for (let i = 0; i < ncols; i++) {
-            //     let a = new Array(ncrows);
-            //     a.fill(0, 0, nrows - - 1);
-            //     mxcols.push(a);
-            // }
+            let mxcols = create2Darray(ncols, nrows, noValue);
+
 
             let links = [];
             let min = +rawdata.matrix[0][propname];
@@ -161,22 +214,27 @@
                 let r = rawdata.rowLabels.indexOf(pair[rowname])
                 let c = rawdata.colLabels.indexOf(pair[colname])
                 let v = +pair[propname];
-                // check if pair was seen before
-                if (mxrows[r][c] != null && mxrows[r][c] != 0) {
-                    switch (duplicatesMode) {
-                        case "first": v = mxrows[r][c]; break;
-                        case "last": v = v; break;
-                        case "min": v = Math.min(v, mxrows[r][c]); break;
-                        case "max": v = Math.max(v, mxrows[r][c]); break;
-                        default: v = mxrows[r][c]; break;
-                    }
-                }
-                mxrows[r][c] = v;
-                mxcols[c][r] = v;
-                min = Math.min(min, v);
-                max = Math.max(max, v);
 
-                links.push({ source: r, target: c, value: v });
+                // apply filters
+                if (okFilter(pair, filters)) {
+
+                    // check if pair was seen before
+                    if (mxrows[r][c] != null && mxrows[r][c] != noValue) {
+                        switch (duplicatesMode) {
+                            case "first": v = mxrows[r][c]; break;
+                            case "last": v = v; break;
+                            case "min": v = Math.min(v, mxrows[r][c]); break;
+                            case "max": v = Math.max(v, mxrows[r][c]); break;
+                            default: v = mxrows[r][c]; break;
+                        }
+                    }
+                    mxrows[r][c] = v;
+                    mxcols[c][r] = v;
+                    min = Math.min(min, v);
+                    max = Math.max(max, v);
+
+                    links.push({ source: r, target: c, value: v });
+                }
             })
 
             return { rowMatrix: mxrows, colMatrix: mxcols, links: links, extent: [min, max] };
@@ -293,26 +351,15 @@
          * @param {*} colsLabels 
          */
         const heatmapDendro = function (orderedMatrix, originalMatrix, rowClusters, colClusters, rowsLabels, colsLabels, colorScale) {
-
-            // clear canvas
-            dendroCanvas.selectAll("*").remove();
-
             const rowsTree = rowClusters.tree;
             const colsTree = colClusters.tree;
-            let svg = dendroCanvas.append("svg")
-                .attr("width", "100%")
-                .attr("height", "150px");
-
-            // let height = treeViewSize - margin.top - margin.bottom;
-
             const colNumber = orderedMatrix[0].length;
             const rowNumber = orderedMatrix.length;
             const cellWidth = cellSize + cellGap;
 
             let treeWidth = treeViewSize + heatmapMargin, // size of the cluster tree
-                width = cellWidth * colNumber + treeWidth,
-                rowNodes = rowsTree.descendants(),
-                colNodes = colsTree.descendants(),
+                width = cellWidth * colNumber + treeWidth, //witdth of the view
+
                 height = cellWidth * rowNumber + treeWidth;
 
             let matrix = [];
@@ -382,7 +429,10 @@
                 .attr("width", cellSize)
                 .attr("height", cellSize)
                 .style("fill", function (d) {
-                    return colorScale(d.value);
+                    if (d.value === noValue)
+                        return noValueColor;
+                    else
+                        return colorScale(d.value);
                 })
                 .on("mouseover", function (event, d) {
                     d3.select(this).classed("cell-hover", true);
@@ -393,7 +443,7 @@
                         .select("#tooltipvalue")
                         .html(
                             "Column: " + colsLabels[d.col - 1] + "<br>Row: " + rowsLabels[d.row - 1]
-                            + "<br>Value: " + d.value
+                            + "<br>Value: " + (d.value === noValue ? "N/A" : d.value)
                         );
                     //Show the tooltip
                     d3.select("#d3tooltip").transition()
@@ -421,7 +471,7 @@
                 console.log(d);
 
                 const prefix = isRow ? "cr" : "cc";
-                const lblPrefix =isRow ? "r" : "c";
+                const lblPrefix = isRow ? "r" : "c";
                 const matrix = isRow ? originalMatrix.rowMatrix : originalMatrix.colMatrix;
                 const order = isRow ? rowClusters.order : colClusters.order
                 const leaves = d.leaves();
@@ -459,13 +509,12 @@
                 .attr("d", elbow);
 
             let rnode = rTree.selectAll(".rnode")
-                .data(rowNodes)
+                .data(rowsTree.descendants())
                 .enter().append("circle")
                 .attr("class", "rnode")
                 .attr("transform", function (d) {
                     return "translate(" + d.y + "," + d.x + ")";
                 })
-                // .attr("map-idx", function(d, i){return i})
                 .attr("r", function (d) {
                     return d.children ? 2 : 1
                 }).on("mouseover", function (event, d) {
@@ -483,14 +532,14 @@
                 .attr("d", elbow);
 
             let cnode = cTree.selectAll(".cnode")
-                .data(colNodes)
+                .data(colsTree.descendants())
                 .enter().append("circle")
                 .attr("class", "cnode")
                 .attr("transform", function (d) {
                     return "translate(" + d.y + "," + d.x + ")";
                 })
                 .attr("r", function (d) {
-                    return d.children ? 2 :1;
+                    return d.children ? 2 : 1;
                 })
                 .on("mouseover", function (event, d) {
                     nodeMouseOver(d3.select(this), event, d, false)
@@ -505,10 +554,11 @@
             }
         }
 
-        const clusterByAndDisplay = function (data, rowname, colname, propname, colorschema, duplicatesMode) {
-            dendroCanvas.html("")
+        const clusterByAndDisplay = function (data, rowname, colname, propname, colorschema, duplicatesMode, filters) {
+            emptyMsgDiv.html("")
+
             // get data using accessor
-            let valueMatrix = getValueMatrix(data, rowname, colname, propname, duplicatesMode)
+            let valueMatrix = getValueMatrix(data, rowname, colname, propname, duplicatesMode, filters)
 
             // TODO: add UI to change this
             let cs = colorschema ? colorschema : d3.interpolateRdYlGn;
@@ -563,6 +613,8 @@
                     .attr("id", "tooltipvalue")
             }
 
+            const numHeaders = headers.filter(h => h.isNumeric);
+
             // rows controls
             let rowsCtl = topControls.append("div").attr("class", "");
             rowsCtl.append("label").attr("for", "rowLabelSelect").html("Matrix row labels: ")
@@ -571,8 +623,7 @@
                 .append("select").attr("id", "rowLabelSelect");
             rowLabelInput.selectAll("option")
                 .data(headers)
-                .enter()
-                .append("option")
+                .enter().append("option")
                 .attr("value", function (d) {
                     return d.label;
                 })
@@ -589,8 +640,7 @@
                 .append("select").attr("id", "colLabelSelect");
             colLabelInput.selectAll("option")
                 .data(headers)
-                .enter()
-                .append("option")
+                .enter().append("option")
                 .attr("value", function (d) {
                     return d.label;
                 })
@@ -606,9 +656,8 @@
             let clusterLabelInput = clusterCtl
                 .append("select").attr("id", "clusterLabelSelect");
             clusterLabelInput.selectAll("option")
-                .data(headers.filter(h => h.isNumeric))
-                .enter()
-                .append("option")
+                .data(numHeaders)
+                .enter().append("option")
                 .attr("value", function (d) {
                     return d.label;
                 })
@@ -632,8 +681,7 @@
                 .append("select").attr("id", "duplSelect");
             duplicatesModeInput.selectAll("option")
                 .data(dupModes)
-                .enter()
-                .append("option")
+                .enter().append("option")
                 .attr("value", function (d) {
                     return d.value;
                 })
@@ -755,6 +803,57 @@
                 legend.style("fill", "url(#linear-gradient)");
             })
 
+
+            const filterOptions = ["--", ">", ">=", "<", "<="];
+
+
+            let filtersDiv = topControls.append("div").attr("class", "filters-container");
+            filtersDiv.append("div").attr("style", "grid-row: row /span 2;")
+                .html("Apply filters:<br>\"--\" means no filtering");
+
+            numHeaders.forEach((h, i) => {
+                let selDiv = filtersDiv.append("div").attr("class", "filter");
+                selDiv.append("label").attr("for", `filtersel_${i}`).html(h.label);
+
+                let filterSel = selDiv.append("select")
+                    .attr("id", `filtersel_${i}`)
+                    .attr("filter-for", h.label);
+                filterSel.selectAll("option")
+                    .data(filterOptions)
+                    .enter()
+                    .append("option")
+                    .attr("value", function (d, i) {
+                        return d;
+                    })
+                    .text(function (d) {
+                        return d;
+                    });
+
+                selDiv.append("input").attr("type", "number").attr("id", `filterinp_${i}`).attr("filter-value-for", h.label);
+            });
+
+            const getFilters = function () {
+                let selects = filtersDiv.selectAll("select");
+                const filters = {
+                    //"pident": { mode: ">", value: 70 }
+                }
+                selects.each(function () {
+                    let mode = this.value;
+                    if (mode != "--") {
+                        let k = this.getAttribute("filter-for");
+                        let inp = filtersDiv.selectAll(`input[filter-value-for='${k}']`)
+                        if (inp) {
+                            let d = +inp.node().value.trim()
+                            filters[k] = { mode: mode, value: d }
+                        }
+                    }
+                })
+
+                console.log(filters);
+                return filters;
+            }
+
+
             let errorrDiv = topControls.append("div").attr("class", "errors");
 
             topControls.append("button")
@@ -771,29 +870,25 @@
 
                     if (rowLb === colLb || colLb === clsLb || rowLb === clsLb) {
                         errorrDiv.html("Selected values should be different")
-                    }
-                    else {
+                    } else {
                         let colr = colorSchemas[colorLabelInput.node().value].value;
                         let data = parseData(textdata, headers, rowLb, colLb, clsLb);
                         console.log(data)
                         console.log(`Parsed [${data.rowLabels.length} x ${data.colLabels.length}] matrix
                         with ${data.headers.length - 2} value sets`);
 
-                        clusterByAndDisplay(data, rowLb, colLb, clsLb, colr, duplLb)
+                        clusterByAndDisplay(data, rowLb, colLb, clsLb, colr, duplLb, getFilters())
                     }
-
                 });
 
 
             // search controls
-
             let rowsSearch = dendroControls.append("div");
             rowsSearch.append("label").attr("for", "rowSearchText").html("Search rows for:")
 
             let rsText = rowsSearch.append('textarea')
                 .attr('type', 'text')
                 .attr('name', 'rowSearchText');
-
 
             dendroControls.append("div").append("button")
                 .attr("class", "button")
@@ -818,8 +913,6 @@
                     search(text, false);
                 });
         }
-
-
 
         let headers = parseHeaders(textdata)
         initControls(headers);

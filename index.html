@@ -296,9 +296,26 @@
             padding: 10px;
         }
 
+        .filters-container{
+            background-color: #ccc;
+            grid-row: row 2;
+            grid-column: col  / span 5;
+            display: grid;
+            grid-template-columns: repeat(4, [col] auto);
+            grid-template-rows: repeat(2, [row] auto);
+            gap: 10px;
+            grid-gap: 10px;
+            padding: 10px;
+        }
+        .filter{
+            display: grid;
+            grid-template-rows: repeat(3, [col] auto);
+            grid-template-columns: 1;
+        }
+
         .errors {
             color: red;
-            grid-row: row 2;
+            grid-row: row 3;
             grid-column: col 2 / span 4;
         }
 
@@ -308,7 +325,7 @@
 
         #displayButton {
             grid-column: col 1 / span 1;
-            grid-row: row 2;
+            grid-row: row 3;
         }
 
         /* main wrapper */
@@ -331,10 +348,6 @@
         .dendro-controls {
             border-left: #AAA 1px dotted;
             grid-area: sidebar;
-            /* grid-column: col / span 1;
-            grid-row: row 1; */
-            /* display: grid;
-            grid-template-columns: repeat(1, [col] auto); */
         }
 
         .dendro-controls label {
