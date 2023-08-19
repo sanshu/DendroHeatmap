@@ -264,7 +264,7 @@
         }
 
         text.matched {
-            fill:red;
+            fill: red;
             text-decoration-color: red;
             text-decoration: underline;
         }
@@ -296,10 +296,10 @@
             padding: 10px;
         }
 
-        .filters-container{
+        .filters-container {
             background-color: #ccc;
             grid-row: row 2;
-            grid-column: col  / span 5;
+            grid-column: col / span 5;
             display: grid;
             grid-template-columns: repeat(4, [col] auto);
             grid-template-rows: repeat(2, [row] auto);
@@ -307,7 +307,8 @@
             grid-gap: 10px;
             padding: 10px;
         }
-        .filter{
+
+        .filter {
             display: grid;
             grid-template-rows: repeat(3, [col] auto);
             grid-template-columns: 1;
@@ -423,7 +424,9 @@
         fileInput.addEventListener("change", loadFile);
 
         // load default 
-        d3.text("https://sanshu.github.io/DendroHeatmap/data_samples/new_data_blast90out61.txt")
+        // d3.text("https://sanshu.github.io/DendroHeatmap/data_samples/new_data_blast90out61.txt")
+        d3.text("https://sanshu.github.io/DendroHeatmap/data_samples/all_blast_rawdata.tsv")
+
             .then((text) => {
                 dataTextArea.value = text;
                 drawData();
