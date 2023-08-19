@@ -122,14 +122,16 @@
             let m = [];
 
             lines.forEach((l, i) => {
-                const p = l.split(splitre)
+                if (!l.startsWith("#")) {
+                    const p = l.split(splitre);
 
-                let row = {};
-                headers.forEach((h, j) => row[h.label] = p[j].trim())
-                m.push(row)
+                    let row = {};
+                    headers.forEach((h, j) => row[h.label] = p[j].trim());
+                    m.push(row);
 
-                rowLbs.push(p[rowIdx].trim())
-                colLbs.push(p[colIdx].trim())
+                    rowLbs.push(p[rowIdx].trim());
+                    colLbs.push(p[colIdx].trim());
+                }
             });
 
             return {
