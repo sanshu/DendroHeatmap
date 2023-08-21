@@ -336,12 +336,57 @@
         * @param {*} order - order of rows in the new matrix
         */
         const reorderArray = function (arr, order) {
-            let res = new Array(arr.length)
+            let res = new Array(order.length)
             order.forEach((col, c) => { //oricinal column number and new index
                 res[c] = arr[col]
-            })
+            });
 
             return res;
+        }
+
+        /**
+         * 
+         * @param {Tree node mouse over} node 
+         * @param {*} event 
+         * @param {*} matrix 
+         * @param {*} order 
+         * @param {*} d 
+         * @param {*} isRow 
+         */
+        const nodeMouseOver = function (node, matrix, order, event, d, isRow) {
+            node.classed("node-hover", true)
+                .attr("r", function (d, i) {
+                    return d.children ? 6 : 1
+                });
+            console.log(d);
+
+            const prefix = isRow ? "cr" : "cc";
+            const lblPrefix = isRow ? "r" : "c";
+            const leaves = d.leaves();
+            leaves.forEach(l => {
+                const idx = matrix.indexOf(l.data.canonical); // original idx row from matrix
+                const idx2 = order.indexOf(idx) - 1;
+                if (idx2 >= -1) {
+                    d3.selectAll(`.${prefix}${idx2 + 1}`).classed("cell-hover", true);
+                    d3.selectAll(`.${lblPrefix}${idx2 + 1}`).classed("text-highlight", true)
+                }
+            })
+        }
+        /**
+         * Tree node mouse out
+         * @param {*} node 
+         * @param {*} event 
+         * @param {*} isRow 
+         */
+        const nodeMouseOut = function (node, event, isRow) {
+            node.classed("node-hover", false)
+                .attr("r", function (d) {
+                    return d.children ? 2 : 1
+                });
+            d3.selectAll(".cell").classed("cell-hover", false);
+            const cl = isRow ? ".rowLabel" : ".colLabel";
+
+            d3.selectAll(cl).classed("text-highlight", false)
         }
 
         /**
@@ -464,42 +509,6 @@
                         .style("opacity", 0);
                 });
 
-
-            const nodeMouseOver = function (node, event, d, isRow) {
-                node.classed("node-hover", true)
-                    .attr("r", function (d, i) {
-                        return d.children ? 6 : 1
-                    });
-                console.log(d);
-
-                const prefix = isRow ? "cr" : "cc";
-                const lblPrefix = isRow ? "r" : "c";
-                const matrix = isRow ? originalMatrix.rowMatrix : originalMatrix.colMatrix;
-                const order = isRow ? rowClusters.order : colClusters.order
-                const leaves = d.leaves();
-                leaves.forEach(l => {
-                    const idx = matrix.indexOf(l.data.canonical); // original idx row from matrix
-                    console.log(idx)
-                    const idx2 = order.indexOf(idx) - 1;
-                    if (idx2 >= -1) {
-                        d3.selectAll(`.${prefix}${idx2 + 1}`).classed("cell-hover", true);
-                        d3.selectAll(`.${lblPrefix}${idx2 + 1}`).classed("text-highlight", true)
-                    }
-                })
-
-                // console.log(node.attr("map-idx"))
-            }
-            const nodeMouseOut = function (node, event, d, isRow) {
-                node.classed("node-hover", false)
-                    .attr("r", function (d) {
-                        return d.children ? 2 : 1
-                    });
-                d3.selectAll(".cell").classed("cell-hover", false);
-                const cl = isRow ? ".rowLabel" : ".colLabel";
-
-                d3.selectAll(cl).classed("text-highlight", false)
-            }
-
             //tree for rows
             let rTree = svg.append("g").attr("class", "rtree")
                 .attr("transform", "translate (10, " + (treeWidth + cellSize) + ")");
@@ -520,9 +529,9 @@
                 .attr("r", function (d) {
                     return d.children ? 2 : 1
                 }).on("mouseover", function (event, d) {
-                    nodeMouseOver(d3.select(this), event, d, true)
+                    nodeMouseOver(d3.select(this), originalMatrix.rowMatrix, rowClusters.order, event, d, true)
                 }).on("mouseout", function (event, d) {
-                    nodeMouseOut(d3.select(this), event, d, true)
+                    nodeMouseOut(d3.select(this), event, true)
                 });
 
             //tree for cols
@@ -544,10 +553,10 @@
                     return d.children ? 2 : 1;
                 })
                 .on("mouseover", function (event, d) {
-                    nodeMouseOver(d3.select(this), event, d, false)
+                    nodeMouseOver(d3.select(this), originalMatrix.colMatrix, colClusters.order, event, d, false)
                 })
                 .on("mouseout", function (event, d) {
-                    nodeMouseOut(d3.select(this), event, d, false)
+                    nodeMouseOut(d3.select(this), event, false)
                 });
 
             function elbow(d, i) {
