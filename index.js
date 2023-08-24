@@ -457,7 +457,10 @@
                     return "colLabel mono c" + i;
                 });
 
+            // Apply to whole heatmap to avoid calculating it for each x and y attribute    
+            const shift = -.5 * cellGap + treeWidth;
             let heatMap = svg.append("g").attr("class", "g3").attr("id", "heatmap")
+                .attr("transform", "translate(" + shift + "," + shift + ")")
                 .selectAll(".cellg")
                 .data(matrix, function (d) {
                     return d.row + ":" + d.col;
@@ -465,10 +468,10 @@
                 .enter()
                 .append("rect")
                 .attr("x", function (d) {
-                    return d.col * cellWidth - .5 * cellGap + treeWidth;
+                    return d.col * cellWidth;
                 })
                 .attr("y", function (d) {
-                    return d.row * cellWidth - .5 * cellGap + treeWidth;
+                    return d.row * cellWidth;
                 })
                 .attr("class", function (d) {
                     return "cell cell-border cr" + (d.row - 1) + " cc" + (d.col - 1);
