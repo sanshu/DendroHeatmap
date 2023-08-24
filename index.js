@@ -337,11 +337,58 @@
         */
         const reorderArray = function (arr, order) {
             let res = new Array(order.length)
-            order.forEach((col, c) => { //oricinal column number and new index
+            order.forEach((col, c) => { //original column number and new index
                 res[c] = arr[col]
             });
 
             return res;
+        }
+
+        /**
+         * Averages over two arrays. If one of the values is =noVlues result will have the same.
+         * In one of the arrays shotret that annother averaged value is set tot noValue
+         * @param {*} a first array
+         * @param {*} b second array
+         * @returns averaged array
+         */
+        const averageArray = function (a, b) {
+            let L = Math.max(a.length, b.length);
+            let res = [];
+            for (let i = 0; i < L; i++) {
+                let va = a[i] === null ? noValue : a[i];
+                let vb = b[i] === null ? noValue : b[i];
+                let v = (va === noValue || vb === noValue) ? noValue : (va + vb) / 2;
+                res.push(v)
+            }
+            return res;
+        }
+
+
+        /**
+         * Create reordered field for every node, accordign to the order
+         * @param {*} clusters - clustered tree from hcluster() call
+         * @param {*} order - array on indexes in original data set
+         * @param {*} origLabels - nnode labels in original order
+         */
+        const reorderTreeData = function (clusters, order, origLabels) {
+            const tree = clusters.tree;
+            let labels = reorderArray(origLabels, clusters.order);
+
+            //loop over all tree nodes (non-leaves included)
+            tree.descendants().forEach((d, i) => {
+                let a = d.data.canonical;
+                d.data.collapsed = false;
+                if (d.children) {
+                    let avg = averageArray(d.children[0].data.canonical, d.children[1].data.canonical);
+                    d.data.ordered = reorderArray(avg, order);
+                }
+                else
+                    d.data.ordered = reorderArray(a, order);
+            })
+            tree.leaves().forEach((d, i) => {
+                d.data.label = labels[i]
+                d.data.originalIndex = origLabels.indexOf(labels[i])
+            })
         }
 
         /**
@@ -353,7 +400,7 @@
          * @param {*} d 
          * @param {*} isRow 
          */
-        const nodeMouseOver = function (node, matrix, order, event, d, isRow) {
+        const nodeMouseOver = function (node,order, event, d, isRow) {
             node.classed("node-hover", true)
                 .attr("r", function (d, i) {
                     return d.children ? 6 : 1
@@ -364,7 +411,7 @@
             const lblPrefix = isRow ? "r" : "c";
             const leaves = d.leaves();
             leaves.forEach(l => {
-                const idx = matrix.indexOf(l.data.canonical); // original idx row from matrix
+                const idx =  l.data.originalIndex ;//matrix.indexOf(l.data.canonical); // original idx row from matrix
                 const idx2 = order.indexOf(idx) - 1;
                 if (idx2 >= -1) {
                     d3.selectAll(`.${prefix}${idx2 + 1}`).classed("cell-hover", true);
@@ -389,32 +436,34 @@
             d3.selectAll(cl).classed("text-highlight", false)
         }
 
-        /**
-         * Actual drawig function
-         * @param {*} orderedMatrix 
-         * @param {*} rowsTree 
-         * @param {*} colsTree 
-         * @param {*} rowsLabels 
-         * @param {*} colsLabels 
-         */
-        const heatmapDendro = function (orderedMatrix, originalMatrix, rowClusters, colClusters, rowsLabels, colsLabels, colorScale) {
+       /**
+        * 
+        * @param {*} rowClusters Clustered data for rows
+        * @param {*} colClusters Clustered data for columns
+        * @param {*} colorScale  Coloring function
+        */
+        const heatmapDendro = function (rowClusters, colClusters, colorScale) {
             const rowsTree = rowClusters.tree;
             const colsTree = colClusters.tree;
-            const colNumber = orderedMatrix[0].length;
-            const rowNumber = orderedMatrix.length;
+            // tmp, use directly later
+            const rowsLabels = rowClusters.tree.leaves().map(d => d.data.label);
+            const colsLabels = colClusters.tree.leaves().map(d => d.data.label);
+
+            const colNumber = colsLabels.length;
+            const rowNumber = rowsLabels.length;
             const cellWidth = cellSize + cellGap;
 
             let treeWidth = treeViewSize + heatmapMargin, // size of the cluster tree
-                width = cellWidth * colNumber + treeWidth, //witdth of the view
-
+                width = cellWidth * colNumber + treeWidth, //width of the view
                 height = cellWidth * rowNumber + treeWidth;
 
+            // keep for now, move to data.enter later    
             let matrix = [];
-            for (let r = 0; r < rowNumber; r++) {
-                for (let c = 0; c < colNumber; c++) {
-                    matrix.push({ row: r + 1, col: c + 1, value: orderedMatrix[r][c] });
-                }
-            }
+            rowsTree.leaves().forEach((l, r) => {
+                l.data.ordered.forEach((v, c) =>
+                    matrix.push({ row: r + 1, col: c + 1, value: v })
+                )
+            })
 
             svg.selectAll("*").remove();
 
@@ -424,12 +473,10 @@
             let rowLabels = svg.append("g").attr("id", "rowlabels")
                 .attr("transform", "translate(" + (width + cellSize) + "," + cellSize / 1.5 + ") ")
                 .selectAll(".rowLabelg")
-                .data(rowsLabels)
+                .data(rowsTree.leaves())
                 .enter()
                 .append("text")
-                .text(function (d) {
-                    return d;
-                })
+                .text(d => d.data.label)
                 .attr("x", 0)
                 .attr("y", function (d, i) {
                     return (i + 1) * cellWidth + treeWidth;
@@ -441,12 +488,10 @@
 
             let colLabels = svg.append("g").attr("id", "columnlabels")
                 .selectAll(".colLabelg")
-                .data(colsLabels)
+                .data(colsTree.leaves())
                 .enter()
                 .append("text")
-                .text(function (d) {
-                    return d;
-                })
+                .text(d => d.data.label)
                 .attr("x", 0)
                 .attr("y", function (d, i) {
                     return (i + 1) * cellWidth;
@@ -532,7 +577,7 @@
                 .attr("r", function (d) {
                     return d.children ? 2 : 1
                 }).on("mouseover", function (event, d) {
-                    nodeMouseOver(d3.select(this), originalMatrix.rowMatrix, rowClusters.order, event, d, true)
+                    nodeMouseOver(d3.select(this), rowClusters.order, event, d, true)
                 }).on("mouseout", function (event, d) {
                     nodeMouseOut(d3.select(this), event, true)
                 });
@@ -552,11 +597,14 @@
                 .attr("transform", function (d) {
                     return "translate(" + d.y + "," + d.x + ")";
                 })
+                .attr("fill", function (d) {
+                    return d.data.collapsed ? "#000" : "#AAA";
+                })
                 .attr("r", function (d) {
                     return d.children ? 2 : 1;
                 })
                 .on("mouseover", function (event, d) {
-                    nodeMouseOver(d3.select(this), originalMatrix.colMatrix, colClusters.order, event, d, false)
+                    nodeMouseOver(d3.select(this),  colClusters.order, event, d, false)
                 })
                 .on("mouseout", function (event, d) {
                     nodeMouseOut(d3.select(this), event, false)
@@ -574,7 +622,6 @@
             // get data using accessor
             let valueMatrix = getValueMatrix(data, rowname, colname, propname, duplicatesMode, filters)
 
-            // TODO: add UI to change this
             let cs = colorschema ? colorschema : d3.interpolateRdYlGn;
             let colorScale = d3.scaleSequential(valueMatrix.extent, cs);
 
@@ -588,11 +635,11 @@
             let colClusters = hcluster(valueMatrix.colMatrix);
             console.log(colClusters)
 
-            let orderedMatrix = reorderMatrix(valueMatrix.rowMatrix, rowClusters.order, colClusters.order)
-            let rowsLabels = reorderArray(data.rowLabels, rowClusters.order)
-            let colsLabels = reorderArray(data.colLabels, colClusters.order)
+            // update trees - for each node add reordered fdata array
+            reorderTreeData(rowClusters, colClusters.order, data.rowLabels)
+            reorderTreeData(colClusters, rowClusters.order, data.colLabels)
 
-            heatmapDendro(orderedMatrix, valueMatrix, rowClusters, colClusters, rowsLabels, colsLabels, colorScale)
+            heatmapDendro(rowClusters, colClusters, colorScale)
         }
 
         const temsSplitre = /[\t\n\s]+/;
@@ -862,7 +909,7 @@
                         }
                     }
                 })
-
+                console.log("Filters:");
                 console.log(filters);
                 return filters;
             }
@@ -887,7 +934,7 @@
                     } else {
                         let colr = colorSchemas[colorLabelInput.node().value].value;
                         let data = parseData(textdata, headers, rowLb, colLb, clsLb);
-                        console.log(data)
+                        // console.log(data)
                         console.log(`Parsed [${data.rowLabels.length} x ${data.colLabels.length}] matrix
                         with ${data.headers.length - 2} value sets`);
 
