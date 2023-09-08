@@ -28,7 +28,9 @@
         const dendroCanvas = wrapper.append("div")
             .style("overflow", "scroll")
             .attr("class", "dendro-canvas")
+
         const emptyMsgDiv = dendroCanvas.append("div").html("Nothing to display yet.");
+
         let margin = {
             top: 150,
             right: 50,
@@ -42,10 +44,16 @@
             }
         };
 
+
+        let valueMatrix; // global var containing preparsedfiltered data
+
+
         //matrix cell size
         const cellSize = 12;
         // space between cells in map
         const cellGap = 2;
+        // total width of the cell
+        const cellWidth = cellSize + cellGap;
         // depth of the panel with the tree
         const treeViewSize = 200;
         // space between trees and map
@@ -242,6 +250,40 @@
             return { rowMatrix: mxrows, colMatrix: mxcols, links: links, extent: [min, max] };
         }
 
+        const initSvgElements = function () {
+            let rowLabels = svg.append("g").attr("id", "rowLabels")
+            let colLabels = svg.append("g").attr("id", "columnLabels");
+            let heatMap = svg.append("g").attr("class", "g3").attr("id", "heatmap");
+            let rtree = svg.append("g").attr("id", "rtree").attr("class", "rtree");
+            let ctree = svg.append("g").attr("id", "ctree").attr("class", "ctree");
+        }
+        const layoutTree = function (data, tree) {
+
+            const h = (cellSize + cellGap) * tree.leaves().length + cellGap;
+            const w = treeViewSize;
+
+            const treeSeparation = function (a, b) {
+                return cellSize + cellGap;
+            }
+
+            let tree1 = d3.cluster().size([h, w]).separation(treeSeparation);
+            tree1(tree);
+
+            // now leaves are ordered by cluster id
+            let leaves = tree.leaves();
+
+            // will keep index of element in original data here
+            let order = [];
+
+            leaves.forEach(function (leaf) {
+                let d = leaf.data.canonical; // original row from matrix
+                let i = data.indexOf(d);
+                order.push(i);
+            });
+
+            return { tree: tree, order: order };
+        }
+
         /**
          * Performs hierarchical clustering and ordering of elements.
          * Returns tree and array of elements' indices in original data
@@ -267,32 +309,8 @@
 
             let clusters = clusterfck.hcluster(data);
             let tree = d3.hierarchy(clusters[0], children);
-
-            const h = (cellSize + cellGap) * data.length + cellGap;
-            const w = treeViewSize;
-
-
-            function separation(a, b) {
-                return cellSize + cellGap;
-            }
-
-            let tree1 = d3.cluster().size([h, w]).separation(separation);
-            tree1(tree);
-
-            // now leaves are ordered by cluster id
-            let leaves = tree.leaves();
-
-            // will keep index of element in original data here
-            let order = [];
-
-            leaves.forEach(function (leaf) {
-                let d = leaf.data.canonical; // original row from matrix
-                let i = data.indexOf(d);
-                order.push(i);
-            });
             console.log('Data clustered (hierarchical)');
-
-            return { tree: tree, order: order };
+            return layoutTree(data, tree)
         };
 
         const clusterKmeans = function (data, numClusters) {
@@ -376,14 +394,14 @@
 
             //loop over all tree nodes (non-leaves included)
             tree.descendants().forEach((d, i) => {
-                let a = d.data.canonical;
+                d.data.id = i;
                 d.data.collapsed = false;
                 if (d.children) {
                     let avg = averageArray(d.children[0].data.canonical, d.children[1].data.canonical);
                     d.data.ordered = reorderArray(avg, order);
                 }
                 else
-                    d.data.ordered = reorderArray(a, order);
+                    d.data.ordered = reorderArray(d.data.canonical, order);
             })
             tree.leaves().forEach((d, i) => {
                 d.data.label = labels[i]
@@ -395,15 +413,14 @@
          * 
          * @param {Tree node mouse over} node 
          * @param {*} event 
-         * @param {*} matrix 
          * @param {*} order 
          * @param {*} d 
          * @param {*} isRow 
          */
-        const nodeMouseOver = function (node,order, event, d, isRow) {
+        const nodeMouseOver = function (node, order, event, d, isRow) {
             node.classed("node-hover", true)
                 .attr("r", function (d, i) {
-                    return d.children ? 6 : 1
+                    return d.children ? 6 : 2
                 });
             console.log(d);
 
@@ -411,14 +428,56 @@
             const lblPrefix = isRow ? "r" : "c";
             const leaves = d.leaves();
             leaves.forEach(l => {
-                const idx =  l.data.originalIndex ;//matrix.indexOf(l.data.canonical); // original idx row from matrix
-                const idx2 = order.indexOf(idx) - 1;
+                // const idx = l.data.originalIndex;//matrix.indexOf(l.data.canonical); // original idx row from matrix
+                const idx2 = l.data.id;//order.indexOf(idx) - 1;
                 if (idx2 >= -1) {
-                    d3.selectAll(`.${prefix}${idx2 + 1}`).classed("cell-hover", true);
-                    d3.selectAll(`.${lblPrefix}${idx2 + 1}`).classed("text-highlight", true)
+                    d3.selectAll(`.${prefix}${idx2}`).classed("cell-hover", true);
+                    d3.selectAll(`.${lblPrefix}${idx2}`).classed("text-highlight", true)
                 }
             })
         }
+
+        const nodeClicked = function (node, rowClusters, colClusters, event, d, isRow, colorScale) {
+            // do ot collapse root node
+            if (!d.parent) return;
+            d.data.collapsed = !d.data.collapsed
+            node.classed("node-collapsed", d.data.collapsed)
+
+            if (d.children) {
+                d._children = d.children;
+                d.children = null;
+            } else {
+                d.children = d._children;
+                d._children = null;
+            }
+
+            if (d.data.collapsed) {
+                d.data._label = d.data.label;
+                d.data.label = "[collapsed]";
+            } else {
+                d.data.label = d.data._label;
+            }
+
+            let data = isRow ? valueMatrix.rowMatrix : valueMatrix.colMatrix;
+            let tree = isRow ? rowClusters.tree : colClusters.tree;
+            let newLayout = layoutTree(data, tree);
+
+            if (isRow)
+                heatmapDendro(newLayout, colClusters, colorScale);
+            else {
+                // need to reorder heatmap data for rows, extracted from reorderTreeData()
+                rowClusters.tree.descendants().forEach((d, i) => {
+                    if (d.children) {
+                        let avg = averageArray(d.children[0].data.canonical, d.children[1].data.canonical);
+                        d.data.ordered = reorderArray(avg, newLayout.order);
+                    }
+                    else
+                        d.data.ordered = reorderArray(d.data.canonical, newLayout.order);
+                })
+                heatmapDendro(rowClusters, newLayout, colorScale);
+            }
+        }
+
         /**
          * Tree node mouse out
          * @param {*} node 
@@ -436,82 +495,229 @@
             d3.selectAll(cl).classed("text-highlight", false)
         }
 
-       /**
-        * 
-        * @param {*} rowClusters Clustered data for rows
-        * @param {*} colClusters Clustered data for columns
-        * @param {*} colorScale  Coloring function
-        */
+        /**
+         * 
+         * @param {*} rowClusters Clustered data for rows
+         * @param {*} colClusters Clustered data for columns
+         * @param {*} colorScale  Coloring function
+         */
         const heatmapDendro = function (rowClusters, colClusters, colorScale) {
             const rowsTree = rowClusters.tree;
             const colsTree = colClusters.tree;
-            // tmp, use directly later
-            const rowsLabels = rowClusters.tree.leaves().map(d => d.data.label);
-            const colsLabels = colClusters.tree.leaves().map(d => d.data.label);
 
-            const colNumber = colsLabels.length;
-            const rowNumber = rowsLabels.length;
-            const cellWidth = cellSize + cellGap;
+            const rows = rowClusters.tree.leaves();
+            const cols = colsTree.leaves();
+
+            const colNumber = cols.length;
+            const rowNumber = rows.length;
+
+            const duration = 500;
+            const tranz = svg.transition().duration(duration);
 
             let treeWidth = treeViewSize + heatmapMargin, // size of the cluster tree
-                width = cellWidth * colNumber + treeWidth, //width of the view
+                width = cellWidth * colNumber + treeWidth, //size of the view
                 height = cellWidth * rowNumber + treeWidth;
 
             // keep for now, move to data.enter later    
             let matrix = [];
-            rowsTree.leaves().forEach((l, r) => {
+            rows.forEach((l, r) => {
                 l.data.ordered.forEach((v, c) =>
-                    matrix.push({ row: r + 1, col: c + 1, value: v })
+                    matrix.push({
+                        row: r + 1, col: c + 1, value: v,
+                        rdata: rows[r].data,
+                        cdata: cols[c].data
+                    })
                 )
             })
-
-            svg.selectAll("*").remove();
 
             svg.attr("width", width + margin.left + margin.right + treeWidth)
                 .attr("height", height + margin.top + margin.bottom + treeWidth);
 
-            let rowLabels = svg.append("g").attr("id", "rowlabels")
-                .attr("transform", "translate(" + (width + cellSize) + "," + cellSize / 1.5 + ") ")
-                .selectAll(".rowLabelg")
-                .data(rowsTree.leaves())
-                .enter()
-                .append("text")
+            const ithCell = function (d, i) {
+                return (i + 1) * cellWidth;
+            }
+
+            const rowLabelsG = svg.select("#rowLabels");
+            rowLabelsG.attr("transform", "translate(" + (width + cellSize) + "," + (treeWidth + cellSize / 1.5) + ") ");
+
+            const rowLabelsUpdate = rowLabelsG.selectAll("text")
+                .data(rows, d => d)
+                .attr("class", "rowLabelg")
                 .text(d => d.data.label)
-                .attr("x", 0)
-                .attr("y", function (d, i) {
-                    return (i + 1) * cellWidth + treeWidth;
-                })
-                .style("text-anchor", "start")
+                .call(update => update.transition(tranz)
+                    .attr("y", ithCell)
+                )
                 .attr("class", function (d, i) {
-                    return "rowLabel mono r" + i;
+                    return "rowLabel mono r" + d.data.id;
                 });
 
-            let colLabels = svg.append("g").attr("id", "columnlabels")
-                .selectAll(".colLabelg")
-                .data(colsTree.leaves())
-                .enter()
-                .append("text")
+            const rowLabelsEnter = rowLabelsUpdate.enter().append("text")
                 .text(d => d.data.label)
                 .attr("x", 0)
+                .call(update => update.transition(tranz)
+                    .attr("y", ithCell)
+                )
+                .style("text-anchor", "start")
+                .attr("class", function (d, i) {
+                    return "rowLabel mono r" + d.data.id;
+                });
+
+            const rowLabelsExit = rowLabelsUpdate.exit()
+                .call(exit => exit.transition(tranz)
+                    .attr("opacity", 0)
+                    .remove());
+
+            const colLabelsG = svg.select("#columnLabels");
+            colLabelsG.attr("transform", "translate(" + cellWidth / 2 + ",-6) rotate (-90)  translate( -" + (height + cellWidth * 2) + "," + treeWidth + ")")
+
+            const colLabelsUpdate = colLabelsG.selectAll("text")
+                .data(cols, d => d.data.label)
+                .attr("class", ".colLabelg")
+                .attr("class", function (d, i) {
+                    return "colLabel mono c" + d.data.id;
+                })
+                .call(update => update.transition(tranz)
+                    .attr("y", ithCell)
+                );
+
+            const colLabelsEnter = colLabelsUpdate.enter().append("text")
+                .attr("class", ".colLabelg")
+                .style("text-anchor", "end")
+                .attr("x", 0)
+                .text(d => d.data.label)
                 .attr("y", function (d, i) {
                     return (i + 1) * cellWidth;
                 })
-                .style("text-anchor", "end")
-                .attr("transform", "translate(" + cellWidth / 2 + ",-6) rotate (-90)  translate( -" + (height + cellWidth * 2) + "," + treeWidth + ")")
                 .attr("class", function (d, i) {
-                    return "colLabel mono c" + i;
-                });
+                    return "colLabel mono c" + d.data.id;
+                })
+                .call(enter => enter.transition(tranz)
+                    .attr("y", function (d, i) {
+                        return (i + 1) * cellWidth;
+                    }).attr("opacity", 1)
+                );
+
+            const colLabelsExit = colLabelsUpdate.exit()
+                .call(exit => exit.transition(tranz)
+                    .attr("opacity", 0)
+                    .remove());
+
 
             // Apply to whole heatmap to avoid calculating it for each x and y attribute    
-            const shift = -.5 * cellGap + treeWidth;
-            let heatMap = svg.append("g").attr("class", "g3").attr("id", "heatmap")
-                .attr("transform", "translate(" + shift + "," + shift + ")")
-                .selectAll(".cellg")
+            const shift = -.5 * cellGap + treeWidth;//+ cellWidth;
+            let heatMap = svg.select("#heatmap");
+            if (heatMap.empty())
+                svg.append("g").attr("class", "g3").attr("id", "heatmap");
+            heatMap.attr("transform", "translate(" + shift + "," + shift + ")");
+
+            const cellMouseOver = function (event, d) {
+                d3.select(this).classed("cell-hover", true);
+                //Update the tooltip position and value
+
+                let tooltipContent = "Column: " + d.cdata.label +
+                    "<br>Row: " + d.rdata.label
+                    + "<br>Value: " + (d.value === noValue ? "N/A" : d.value)
+
+                d3.select("#d3tooltip")
+                    .style("left", (event.pageX - 210) + "px")
+                    .style("top", (event.pageY - 80) + "px")
+                    .select("#tooltipvalue")
+                    .html(tooltipContent);
+                //Show the tooltip
+                d3.select("#d3tooltip").transition()
+                    .duration(200)
+                    .style("opacity", .9);
+
+                d3.selectAll(`.r${d.rdata.id}`).classed("text-highlight", true);
+                d3.selectAll(`.c${d.cdata.id}`).classed("text-highlight", true);
+            }
+
+            const cellMouseOut = function (event, d) {
+                d3.select(this).classed("cell-hover", false);
+                d3.selectAll(".rowLabel").classed("text-highlight", false);
+                d3.selectAll(".colLabel").classed("text-highlight", false);
+                d3.select("#d3tooltip").transition()
+                    .duration(200)
+                    .style("opacity", 0);
+            }
+            /*
+                        // rows in the heatmap   
+                        const rowsUpdate = heatMap.selectAll("g")
+                            .data(rows)
+                            .attr("class", function (d, i) {
+                                return `rowgroup rowgroup_${i}`
+                            })
+                            .attr("transform",function (d, i) { return "translate(0," +  (i * cellWidth) + ")";})
+                            // .attr("x", 0)
+                            // .attr("y", function (d, i) {
+                            //     return i * cellWidth;
+                            // });
+            
+                        const rowsExit = rowsUpdate.exit()
+                            .call(exit => exit.transition(tranz)
+                                .attr("opacity", 0)
+                                .attr("height", 0)
+                                .remove());
+            
+            
+                        const rowsEnter = rowsUpdate.enter().append("g")
+                            .attr("class", function (d, i) {
+                                return `rowgroup rowgroup_${i}`
+                            }).attr("id", function (d, i) {
+                                return `row-${i}`
+                            })
+                            .attr("transform",function (d, i) { return "translate(0," +  (i * cellWidth) + ")";})
+            
+                        ///cells in the row    
+                        const cellsUpdate = rowsUpdate.selectAll("g")
+                            .data(function (d) {
+                                 return d.data.ordered; 
+                                })
+                            // .attr("class", "cellg")
+                            .attr("x", function (d, i) {
+                                return i * cellWidth;
+                            })
+                            .attr("y", function (d) {
+                                return 0;
+                            })
+                            .attr("class", function (d, i) {
+                                return "cell cell-border cc" + (i - 1);
+                            })
+                            .style("fill", function (d) {
+                                return (d === noValue) ? noValueColor : colorScale(d);
+                            });
+            
+                        const cellsEnter = cellsUpdate.enter().append("rect")
+                            .attr("class", "cellg")
+                            .attr("x", function (d, i) {
+                                return i * cellWidth;
+                            })
+                            .attr("y", function (d) {
+                                return 0;//d.row * cellWidth;
+                            })
+                            .attr("class", function (d, i) {
+                                return "cell cell-border  cc" + (i - 1);
+                            })
+                            .attr("width", cellSize)
+                            .attr("height", cellSize)
+                            .style("fill", function (d) {
+                                return (d === noValue) ? noValueColor : colorScale(d);
+                            })
+                            .on("mouseover", cellMouseOver)
+                            .on("mouseout", cellMouseOut);
+            
+                        const cellsExit = cellsUpdate.exit()
+                            .call(exit => exit.transition(tranz)
+                                .attr("opacity", 0)
+                                .attr("height", 0)
+                                .remove());
+            
+            */
+            const cellsUpdate = heatMap.selectAll("rect")
                 .data(matrix, function (d) {
                     return d.row + ":" + d.col;
                 })
-                .enter()
-                .append("rect")
+                .attr("class", "cellg")
                 .attr("x", function (d) {
                     return d.col * cellWidth;
                 })
@@ -519,96 +725,111 @@
                     return d.row * cellWidth;
                 })
                 .attr("class", function (d) {
-                    return "cell cell-border cr" + (d.row - 1) + " cc" + (d.col - 1);
+                    return "cell cell-border cr" + (d.rdata.id) + " cc" + (d.cdata.id);
+                })
+                .style("fill", function (d) {
+                    return (d.value === noValue) ? noValueColor : colorScale(d.value);
+                });
+
+            const cellsEnter = cellsUpdate.enter().append("rect")
+                .attr("class", "cellg")
+                .attr("x", function (d) {
+                    return d.col * cellWidth;
+                })
+                .attr("y", function (d) {
+                    return d.row * cellWidth;
+                })
+                .attr("class", function (d) {
+                    return "cell cell-border cr" + (d.rdata.id) + " cc" + (d.cdata.id);
                 })
                 .attr("width", cellSize)
                 .attr("height", cellSize)
                 .style("fill", function (d) {
-                    if (d.value === noValue)
-                        return noValueColor;
+                    return (d.value === noValue) ? noValueColor : colorScale(d.value);
+                })
+                .on("mouseover", cellMouseOver)
+                .on("mouseout", cellMouseOut);
+
+            const cellsExit = cellsUpdate.exit()
+                .call(exit => exit.transition(tranz)
+                    .attr("opacity", 0)
+                    .attr("height", 0)
+                    .remove());
+
+
+            const drawTree = function (treeGroup, tree, isRow) {
+                // branches    
+                const rLinkUpdate = treeGroup.selectAll(".treelink")
+                    .data(tree.links(), d => d.source.data.id)
+                    .attr("fill", "none")
+                    .attr("d", elbow);
+
+                const rLinkEnter = rLinkUpdate.enter().append("path")
+                    .attr("class", "treelink")
+                    .attr("fill", "none")
+                    .attr("d", elbow);
+
+                const rLinkExit = rLinkUpdate.exit()
+                    .call(exit => exit.transition(tranz)
+                        .attr("fill-opacity", 0)
+                        .attr("stroke-opacity", 0)
+                        .attr("height", 0)
+                        .remove()
+                    );
+
+                const nodeSize = function (d) {
+                    if (d.data.collapsed)
+                        return 6;
                     else
-                        return colorScale(d.value);
-                })
-                .on("mouseover", function (event, d) {
-                    d3.select(this).classed("cell-hover", true);
-                    //Update the tooltip position and value
-                    d3.select("#d3tooltip")
-                        .style("left", (event.pageX - 210) + "px")
-                        .style("top", (event.pageY - 80) + "px")
-                        .select("#tooltipvalue")
-                        .html(
-                            "Column: " + colsLabels[d.col - 1] + "<br>Row: " + rowsLabels[d.row - 1]
-                            + "<br>Value: " + (d.value === noValue ? "N/A" : d.value)
-                        );
-                    //Show the tooltip
-                    d3.select("#d3tooltip").transition()
-                        .duration(200)
-                        .style("opacity", .9);
+                        return d.children ? 2 : 1.5
+                }
 
-                    d3.selectAll(`.r${d.row - 1}`).classed("text-highlight", true);
-                    d3.selectAll(`.c${d.col - 1}`).classed("text-highlight", true);
-                })
-                .on("mouseout", function () {
-                    d3.select(this).classed("cell-hover", false);
-                    d3.selectAll(".rowLabel").classed("text-highlight", false);
-                    d3.selectAll(".colLabel").classed("text-highlight", false);
-                    d3.select("#d3tooltip").transition()
-                        .duration(200)
-                        .style("opacity", 0);
-                });
+                const order = isRow ? rowClusters.order : colClusters.order;
+                //nodes    
+                const rNodeUpdate = treeGroup.selectAll(".treenode")
+                    .data(tree.descendants())
+                    .attr("transform", function (d) {
+                        return "translate(" + d.y + "," + d.x + ")";
+                    })
+                    // .attr("r", nodeSize)
+                    .on("mouseover", function (event, d) {
+                        nodeMouseOver(d3.select(this), order, event, d, isRow);
+                    }).on("mouseout", function (event, d) {
+                        nodeMouseOut(d3.select(this), event, isRow);
+                    }).on("click", function (event, d) {
+                        nodeClicked(d3.select(this), rowClusters, colClusters, event, d, isRow, colorScale);
+                    });;
 
-            //tree for rows
-            let rTree = svg.append("g").attr("class", "rtree")
+                const rNodeEnter = rNodeUpdate.enter().append("circle")
+                    .attr("class", "treenode")
+                    .attr("transform", function (d) {
+                        return "translate(" + d.y + "," + d.x + ")";
+                    })
+                    .attr("r", nodeSize)
+                    .on("mouseover", function (event, d) {
+                        nodeMouseOver(d3.select(this), order, event, d, isRow);
+                    }).on("mouseout", function (event, d) {
+                        nodeMouseOut(d3.select(this), event, isRow);
+                    }).on("click", function (event, d) {
+                        nodeClicked(d3.select(this), rowClusters, colClusters, event, d, isRow, colorScale);
+                    });
+
+                rNodeUpdate.exit().call(exit => exit.transition(tranz)
+                    .attr("opacity", 0)
+                    .attr('r', 1e-6)
+                    .remove());
+            }
+
+
+            /************      tree for rows   *************/
+            const rTreeG = svg.select("#rtree")
                 .attr("transform", "translate (10, " + (treeWidth + cellSize) + ")");
-
-            let rlink = rTree.selectAll(".rlink")
-                .data(rowsTree.links())
-                .enter().append("path")
-                .attr("class", "rlink")
-                .attr("d", elbow);
-
-            let rnode = rTree.selectAll(".rnode")
-                .data(rowsTree.descendants())
-                .enter().append("circle")
-                .attr("class", "rnode")
-                .attr("transform", function (d) {
-                    return "translate(" + d.y + "," + d.x + ")";
-                })
-                .attr("r", function (d) {
-                    return d.children ? 2 : 1
-                }).on("mouseover", function (event, d) {
-                    nodeMouseOver(d3.select(this), rowClusters.order, event, d, true)
-                }).on("mouseout", function (event, d) {
-                    nodeMouseOut(d3.select(this), event, true)
-                });
+            drawTree(rTreeG, rowsTree, true)
 
             //tree for cols
-            let cTree = svg.append("g").attr("class", "ctree").attr("transform", "rotate (90), translate (10, -" + (treeWidth + cellSize) + ") scale(1,-1)");
-            let clink = cTree.selectAll(".clink")
-                .data(colsTree.links())
-                .enter().append("path")
-                .attr("class", "clink")
-                .attr("d", elbow);
-
-            let cnode = cTree.selectAll(".cnode")
-                .data(colsTree.descendants())
-                .enter().append("circle")
-                .attr("class", "cnode")
-                .attr("transform", function (d) {
-                    return "translate(" + d.y + "," + d.x + ")";
-                })
-                .attr("fill", function (d) {
-                    return d.data.collapsed ? "#000" : "#AAA";
-                })
-                .attr("r", function (d) {
-                    return d.children ? 2 : 1;
-                })
-                .on("mouseover", function (event, d) {
-                    nodeMouseOver(d3.select(this),  colClusters.order, event, d, false)
-                })
-                .on("mouseout", function (event, d) {
-                    nodeMouseOut(d3.select(this), event, false)
-                });
+            let cTree = svg.select("#ctree")
+                .attr("transform", "rotate (90), translate (10, -" + (treeWidth + cellSize) + ") scale(1,-1)");
+            drawTree(cTree, colsTree, false)
 
             function elbow(d, i) {
                 return "M" + d.source.y + "," + d.source.x
@@ -616,13 +837,14 @@
             }
         }
 
+
         const clusterByAndDisplay = function (data, rowname, colname, propname, colorschema, duplicatesMode, filters) {
             emptyMsgDiv.html("")
 
             // get data using accessor
-            let valueMatrix = getValueMatrix(data, rowname, colname, propname, duplicatesMode, filters)
+            valueMatrix = getValueMatrix(data, rowname, colname, propname, duplicatesMode, filters)
 
-            let cs = colorschema ? colorschema : d3.interpolateRdYlGn;
+            let cs = colorschema ? colorschema : d3.interpolateGreens;
             let colorScale = d3.scaleSequential(valueMatrix.extent, cs);
 
             // const numClusters = 3;
@@ -635,14 +857,14 @@
             let colClusters = hcluster(valueMatrix.colMatrix);
             console.log(colClusters)
 
-            // update trees - for each node add reordered fdata array
+            // update trees - for each node add reordered data array
             reorderTreeData(rowClusters, colClusters.order, data.rowLabels)
             reorderTreeData(colClusters, rowClusters.order, data.colLabels)
 
             heatmapDendro(rowClusters, colClusters, colorScale)
         }
 
-        const temsSplitre = /[\t\n\s]+/;
+        const termsSplitre = /[\t\n\s]+/;
         const search = function (text, rowsmode = true) {
 
             const selector = rowsmode ? ".rowLabel" : ".colLabel";
@@ -653,14 +875,14 @@
                 return;
             }
 
-            const terms = text.split(temsSplitre);
+            const terms = text.split(termsSplitre);
             console.log(terms)
 
             d3.selectAll(selector)
                 .classed("matched", function (d, i) {
                     // d is the text node content
                     let found = false;
-                    terms.forEach((t) => { if (d.indexOf(t) >= 0) found = true })
+                    terms.forEach((t) => { if (d.data.label.indexOf(t) >= 0) found = true })
                     return found;
                 });
         }
@@ -757,25 +979,26 @@
                 .append("select").attr("id", "colorSelect");
 
             const colorSchemas = [
+                //single color
+                { label: "Green", value: d3.interpolateGreens },
                 { label: "Orange", value: d3.interpolateOranges },
+                { label: "Blue", value: d3.interpolateBlues },
+                // { label: "Green", value: d3.interpolateGreens },
+                { label: "Gray", value: d3.interpolateGreys },
+                { label: "Purple", value: d3.interpolatePurples },
+                { label: "Red", value: d3.interpolateReds },
 
 
                 { label: "Red -> Yellow -> Green", value: d3.interpolateRdYlGn },
                 { label: "Brown -> BlueGreen", value: d3.interpolateBrBG },
                 { label: "Purple -> Green", value: d3.interpolatePRGn },
-                { label: "Pinkk -> YellowGreen", value: d3.interpolatePiYG },
+                { label: "Pink -> YellowGreen", value: d3.interpolatePiYG },
                 { label: "Purple -> Orange", value: d3.interpolatePuOr },
 
                 { label: "Red -> Blue", value: d3.interpolateRdBu },
                 { label: "Red -> Yellow -> Blue", value: d3.interpolateRdYlBu },
                 { label: "Spectral", value: d3.interpolateSpectral },
 
-                //single color
-                { label: "Blue", value: d3.interpolateBlues },
-                { label: "Green", value: d3.interpolateGreens },
-                { label: "Gray", value: d3.interpolateGreys },
-                { label: "Purple", value: d3.interpolatePurples },
-                { label: "Red", value: d3.interpolateReds },
 
                 // Multi-Hue    
                 { label: "Turbo", value: d3.interpolateTurbo },
@@ -976,6 +1199,7 @@
         }
 
         let headers = parseHeaders(textdata)
+        initSvgElements();
         initControls(headers);
     }
 
