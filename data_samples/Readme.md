@@ -4,8 +4,8 @@ Tab delimited, at least 3 columns
 Header row, if present should start with #
 
 
-To be able to use blas output:
-1. run sed commant to extrac species name to a separte column
+To be able to use blast output:
+1. run sed commant to extract species name to a separate column
 ```sh
 
 sed  -e 's/\]$//g' -e 's/\[Legionella/\tL./g' blast_output.txt > blast_output_processed.txt
