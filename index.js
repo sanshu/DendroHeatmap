@@ -1245,7 +1245,7 @@
 
                 // Perform click to initiate download
                 link.click()
-                document.removeChild(link);
+                link.remove()
             }
 
             dendroControls.append("div").append("button")
