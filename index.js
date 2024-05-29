@@ -1240,7 +1240,7 @@
 
                 let link = document.createElement("a"); // Or maybe get it from the current document
                 link.href = blobUrl;
-                link.download = "file";
+                link.download = "DendroHeatmap";
                 link.innerHTML = "Click here to download the file";
 
                 // Perform click to initiate download
