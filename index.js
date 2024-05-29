@@ -767,6 +767,7 @@
                 const rLinkEnter = rLinkUpdate.enter().append("path")
                     .attr("class", "treelink")
                     .attr("fill", "none")
+                    .attr("stroke", "#ccc")
                     .attr("d", elbow);
 
                 const rLinkExit = rLinkUpdate.exit()
@@ -1195,6 +1196,64 @@
                 .on("click", function () {
                     const text = csText.node().value.trim();
                     search(text, false);
+                });
+
+
+
+            // from https://observablehq.com/@mbostock/saving-svg    
+            // const rasterize = function (svgElement) {
+            //     let resolve, reject;
+            //     const promise = new Promise((y, n) => (resolve = y, reject = n));
+            //     const image = new Image;
+            //     image.onerror = reject;
+            //     image.onload = () => {
+            //         const rect = svgElement.getBoundingClientRect();
+            //         const context = DOM.context2d(rect.width, rect.height);
+            //         context.drawImage(image, 0, 0, rect.width, rect.height);
+            //         context.canvas.toBlob(resolve);
+            //     };
+            //     image.src = URL.createObjectURL(serialize(svgElement));
+            //     return promise;
+            // }
+            // from https://observablehq.com/@mbostock/saving-svg   
+            const saveAsSvg = function (svgElement) {
+                const xmlns = "http://www.w3.org/2000/xmlns/";
+                const xlinkns = "http://www.w3.org/1999/xlink";
+                const svgns = "http://www.w3.org/2000/svg";
+
+                let svgEl = svgElement.cloneNode(true);
+                const fragment = window.location.href + "#";
+                const walker = document.createTreeWalker(svgEl, NodeFilter.SHOW_ELEMENT);
+                while (walker.nextNode()) {
+                    for (const attr of walker.currentNode.attributes) {
+                        if (attr.value.includes(fragment)) {
+                            attr.value = attr.value.replace(fragment, "#");
+                        }
+                    }
+                }
+                svgEl.setAttributeNS(xmlns, "xmlns", svgns);
+                svgEl.setAttributeNS(xmlns, "xmlns:xlink", xlinkns);
+                const serializer = new window.XMLSerializer;
+                const string = serializer.serializeToString(svgEl);
+                let blob =  new Blob([string], { type: "image/svg+xml" });
+                let blobUrl = URL.createObjectURL(blob);
+
+                let link = document.createElement("a"); // Or maybe get it from the current document
+                link.href = blobUrl;
+                link.download = "file";
+                link.innerHTML = "Click here to download the file";
+
+                // Perform click to initiate download
+                link.click()
+                document.removeChild(link);
+            }
+
+            dendroControls.append("div").append("button")
+                .attr("class", "button")
+                .text("Save as SVG")
+                .on("click", function () {
+                    console.log("Saving as SVG")
+                    saveAsSvg(svg.node());
                 });
         }
 
